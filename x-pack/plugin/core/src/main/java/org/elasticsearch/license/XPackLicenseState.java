@@ -292,7 +292,7 @@ public class XPackLicenseState {
     private final boolean isSecurityEnabled;
     private final boolean isSecurityExplicitlyEnabled;
 
-    private Status status = new Status(OperationMode.TRIAL, true);
+    private volatile Status status = new Status(OperationMode.TRIAL, true);
 
     public XPackLicenseState(Settings settings) {
         this.listeners = new CopyOnWriteArrayList<>();
@@ -338,12 +338,12 @@ public class XPackLicenseState {
     }
 
     /** Return the current license type. */
-    public synchronized OperationMode getOperationMode() {
+    public OperationMode getOperationMode() {
         return status.mode;
     }
 
     /** Return true if the license is currently within its time boundaries, false otherwise. */
-    public synchronized boolean isActive() {
+    public boolean isActive() {
         return status.active;
     }
 
@@ -406,11 +406,12 @@ public class XPackLicenseState {
     /**
      * @return the type of realms that are enabled based on the license {@link OperationMode}
      */
-    public synchronized AllowedRealmType allowedRealmType() {
+    public AllowedRealmType allowedRealmType() {
+        Status localStatus = this.status;
         final boolean isSecurityCurrentlyEnabled =
-            isSecurityEnabled(status.mode, isSecurityExplicitlyEnabled, isSecurityEnabled);
+            isSecurityEnabled(localStatus.mode, isSecurityExplicitlyEnabled, isSecurityEnabled);
         if (isSecurityCurrentlyEnabled) {
-            switch (status.mode) {
+            switch (localStatus.mode) {
                 case PLATINUM:
                 case ENTERPRISE:
                 case TRIAL:
@@ -645,7 +646,7 @@ public class XPackLicenseState {
      * <p>
      *  EQL is available for all license types except {@link OperationMode#MISSING}
      */
-    public synchronized boolean isEqlAllowed() {
+    public boolean isEqlAllowed() {
         return status.active;
     }
 
@@ -707,14 +708,14 @@ public class XPackLicenseState {
         return isActive();
     }
 
-    public synchronized boolean isTrialLicense() {
+    public boolean isTrialLicense() {
         return status.mode == OperationMode.TRIAL;
     }
 
     /**
      * @return true if security is available to be used with the current license type
      */
-    public synchronized boolean isSecurityAvailable() {
+    public boolean isSecurityAvailable() {
         OperationMode mode = status.mode;
         return mode == OperationMode.GOLD || mode == OperationMode.PLATINUM || mode == OperationMode.STANDARD ||
                 mode == OperationMode.TRIAL || mode == OperationMode.BASIC || mode == OperationMode.ENTERPRISE;
@@ -728,7 +729,7 @@ public class XPackLicenseState {
      *             <li>xpack.security.enabled not specified as a setting</li>
      *         </ul>
      */
-    public synchronized boolean isSecurityDisabledByLicenseDefaults() {
+    public boolean isSecurityDisabledByLicenseDefaults() {
         switch (status.mode) {
             case TRIAL:
             case BASIC:
@@ -806,7 +807,7 @@ public class XPackLicenseState {
         return new XPackLicenseState(this);
     }
 
-    private synchronized boolean isAllowedBySecurity() {
+    private boolean isAllowedBySecurity() {
         return isSecurityEnabled(status.mode, isSecurityExplicitlyEnabled, isSecurityEnabled);
     }
 
@@ -820,16 +821,17 @@ public class XPackLicenseState {
      *
      * @return true if feature is allowed, otherwise false
      */
-    private synchronized boolean isAllowedByLicenseAndSecurity(
+    private boolean isAllowedByLicenseAndSecurity(
         OperationMode minimumMode, boolean needSecurity, boolean needActive, boolean allowTrial) {
 
-        if (needSecurity && false == isSecurityEnabled(status.mode, isSecurityExplicitlyEnabled, isSecurityEnabled)) {
+        Status localStatus = this.status;
+        if (needSecurity && false == isSecurityEnabled(localStatus.mode, isSecurityExplicitlyEnabled, isSecurityEnabled)) {
             return false;
         }
-        if (needActive && false == status.active) {
+        if (needActive && false == localStatus.active) {
             return false;
         }
-        return isAllowedByOperationMode(status.mode, minimumMode, allowTrial);
+        return isAllowedByOperationMode(localStatus.mode, minimumMode, allowTrial);
     }
 
 }
