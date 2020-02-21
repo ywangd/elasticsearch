@@ -692,6 +692,7 @@ public final class Settings implements ToXContentFragment {
     public Set<String> keySet() {
         if (keys.get() == null) {
             synchronized (keys) {
+                // Check that the keys are still null now that we have acquired the lock
                 if (keys.get() == null) {
                     if (secureSettings == null) {
                         keys.set(settings.keySet());

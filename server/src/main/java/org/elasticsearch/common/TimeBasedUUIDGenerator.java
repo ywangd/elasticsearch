@@ -59,24 +59,22 @@ class TimeBasedUUIDGenerator implements UUIDGenerator {
     @Override
     public String getBase64UUID()  {
         final int sequenceId = sequenceNumber.incrementAndGet() & 0xffffff;
-        long timestamp = currentTimeMillis();
+        long currentTimeMillis = currentTimeMillis();
 
-        for (;;) {
-            // Don't let timestamp go backwards, at least "on our watch" (while this JVM is running).  We are still vulnerable if we are
-            // shut down, clock goes backwards, and we restart... for this we randomize the sequenceNumber on init to decrease chance of
-            // collision:
-            long copyLastTimestamp = lastTimestamp.get();
-            timestamp = Math.max(copyLastTimestamp, timestamp);
+        long timestamp = this.lastTimestamp.updateAndGet(lastTimestamp -> {
+            // Don't let timestamp go backwards, at least "on our watch" (while this JVM is running).  We are
+            // still vulnerable if we are shut down, clock goes backwards, and we restart... for this we
+            // randomize the sequenceNumber on init to decrease chance of collision:
+            long nonBackwardsTimestamp = Math.max(lastTimestamp, currentTimeMillis);
 
             if (sequenceId == 0) {
-                // Always force the clock to increment whenever sequence number is 0, in case we have a long time-slip backwards:
-                timestamp++;
+                // Always force the clock to increment whenever sequence number is 0, in case we have a long
+                // time-slip backwards:
+                nonBackwardsTimestamp++;
             }
 
-            if (lastTimestamp.compareAndSet(copyLastTimestamp, timestamp)) {
-                break;
-            }
-        }
+            return nonBackwardsTimestamp;
+        });
 
         final byte[] uuidBytes = new byte[15];
         int i = 0;
