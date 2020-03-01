@@ -330,7 +330,7 @@ public class ApiKeyService {
         executeAsyncWithOrigin(ctx, SECURITY_ORIGIN, getRequest, ActionListener.<GetResponse>wrap(response -> {
                 if (response.isExists()) {
                     final Map<String, Object> source = response.getSource();
-                    validateApiKeyCredentials(docId, source, credentials, clock, listener);
+                    threadPool.generic().execute(() -> validateApiKeyCredentials(docId, source, credentials, clock, listener));
                 } else {
                     listener.onResponse(
                         AuthenticationResult.unsuccessful("unable to find apikey with id " + credentials.getId(), null));
