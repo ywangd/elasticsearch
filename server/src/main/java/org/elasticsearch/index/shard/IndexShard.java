@@ -153,7 +153,6 @@ import org.elasticsearch.threadpool.ThreadPool;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.io.UncheckedIOException;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -1038,11 +1037,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     public CompletionStats completionStats(String... fields) {
         readAllowed();
-        try {
-            return getEngine().completionStats(fields);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return getEngine().completionStats(fields);
     }
 
     /**
