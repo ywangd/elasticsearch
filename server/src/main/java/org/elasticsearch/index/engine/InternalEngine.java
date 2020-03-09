@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.engine;
 
+import org.HdrHistogram.Recorder;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.codecs.blocktree.BlockTreeTermsReader;
 import org.apache.lucene.codecs.blocktree.BlockTreeTermsReader.FSTLoadMode;
@@ -57,6 +58,7 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.InfoStream;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.RecordJFR;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Nullable;
@@ -90,6 +92,7 @@ import org.elasticsearch.index.seqno.LocalCheckpointTracker;
 import org.elasticsearch.index.seqno.SeqNoStats;
 import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.ElasticsearchMergePolicy;
+import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.store.FsDirectoryFactory;
 import org.elasticsearch.index.translog.Translog;
@@ -885,7 +888,12 @@ public class InternalEngine extends Engine {
                     assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
 
                     if (plan.indexIntoLucene || plan.addStaleOpToLucene) {
+                        final long startNanos = System.nanoTime();
                         indexResult = indexIntoLucene(index, plan);
+                        Recorder luceneIndexRecorder = IndexShard.luceneIndexRecorder;
+                        if (luceneIndexRecorder != null) {
+                            luceneIndexRecorder.recordValue(RecordJFR.toNanosMaxSecond(System.nanoTime() - startNanos));
+                        }
                     } else {
                         indexResult = new IndexResult(
                             plan.versionForIndexing, index.primaryTerm(), index.seqNo(), plan.currentNotFoundOrDeleted);

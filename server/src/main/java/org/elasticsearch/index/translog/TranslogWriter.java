@@ -24,6 +24,7 @@ import com.carrotsearch.hppc.procedures.LongProcedure;
 import org.HdrHistogram.Recorder;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.elasticsearch.Assertions;
+import org.elasticsearch.RecordJFR;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
@@ -45,7 +46,6 @@ import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongConsumer;
 import java.util.function.LongSupplier;
@@ -380,10 +380,9 @@ public class TranslogWriter extends BaseTranslogReader implements Closeable {
                         channel.force(false);
                         writeCheckpoint(channelFactory, path.getParent(), checkpointToSync);
                         // Record both translog and checkpoint force
-                        Recorder fsyncRecorder = IndexShard.indexRecorder;
+                        Recorder fsyncRecorder = IndexShard.fsyncRecorder;
                         if (fsyncRecorder != null) {
-                            long microsTook = TimeUnit.NANOSECONDS.toMicros(System.nanoTime() - startNanos);
-                            fsyncRecorder.recordValue(microsTook);
+                            fsyncRecorder.recordValue(RecordJFR.toMicrosMaxMinute(System.nanoTime() - startNanos));
                         }
                     } catch (final Exception ex) {
                         closeWithTragicEvent(ex);

@@ -272,12 +272,18 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     private final AtomicReference<Translog.Location> pendingRefreshLocation = new AtomicReference<>();
     private volatile boolean useRetentionLeasesInPeerRecovery;
 
-    public static volatile Recorder indexRecorder;
+    public static volatile Recorder fsyncRecorder;
+    public static volatile Recorder luceneIndexRecorder;
+    public static volatile Recorder translogAddRecorder;
 
     private static synchronized void initialize(ThreadPool threadPool) {
-        if (indexRecorder == null) {
-            indexRecorder = new Recorder(1, TimeUnit.SECONDS.toMicros(60),  3);
-            RecordJFR.scheduleHistogramSample("IndexShard#Fsync", threadPool, new AtomicReference<>(indexRecorder));
+        if (fsyncRecorder == null) {
+            fsyncRecorder = new Recorder(1, TimeUnit.SECONDS.toMicros(60),  3);
+            luceneIndexRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(1),  3);
+            translogAddRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(1),  3);
+            RecordJFR.scheduleHistogramSample("IndexShard#Fsync", threadPool, new AtomicReference<>(fsyncRecorder));
+            RecordJFR.scheduleHistogramSample("IndexShard#Lucene", threadPool, new AtomicReference<>(luceneIndexRecorder));
+            RecordJFR.scheduleHistogramSample("Translog#Add", threadPool, new AtomicReference<>(translogAddRecorder));
         }
     }
 

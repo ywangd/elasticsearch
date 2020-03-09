@@ -32,6 +32,7 @@ import org.elasticsearch.common.metrics.MeanMetric;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.threadpool.ThreadPool;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 @SuppressForbidden(reason = "JFR")
@@ -107,6 +108,14 @@ public class RecordJFR {
                 }
             }
         }, TimeValue.timeValueSeconds(10), ThreadPool.Names.GENERIC);
+    }
+
+    public static long toMicrosMaxMinute(long nanos) {
+        return Math.min(TimeUnit.NANOSECONDS.toMicros(nanos), TimeUnit.MINUTES.toMicros(1));
+    }
+
+    public static long toNanosMaxSecond(long nanos) {
+        return Math.min(nanos, TimeUnit.SECONDS.toNanos(1));
     }
 
     @SuppressForbidden(reason = "JFR")

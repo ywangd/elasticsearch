@@ -19,9 +19,11 @@
 
 package org.elasticsearch.index.translog;
 
+import org.HdrHistogram.Recorder;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.store.AlreadyClosedException;
+import org.elasticsearch.RecordJFR;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -43,6 +45,7 @@ import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.AbstractIndexShardComponent;
+import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.IndexShardComponent;
 import org.elasticsearch.index.shard.ShardId;
 
@@ -542,7 +545,14 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
                     throw new IllegalArgumentException("Operation term is newer than the current term; "
                         + "current term[" + current.getPrimaryTerm() + "], operation term[" + operation + "]");
                 }
-                return current.add(bytes, operation.seqNo());
+
+                long startNanos = System.nanoTime();
+                final Location location = current.add(bytes, operation.seqNo());
+                Recorder translogAddRecorder = IndexShard.translogAddRecorder;
+                if (translogAddRecorder != null) {
+                    translogAddRecorder.recordValue( RecordJFR.toNanosMaxSecond(System.nanoTime() - startNanos));
+                }
+                return location;
             }
         } catch (final AlreadyClosedException | IOException ex) {
             closeOnTragicEvent(ex);
