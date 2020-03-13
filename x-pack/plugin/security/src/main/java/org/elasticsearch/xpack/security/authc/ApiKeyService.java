@@ -83,6 +83,7 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -186,20 +187,21 @@ public class ApiKeyService {
      * Asynchronously creates a new API key based off of the request and authentication
      * @param authentication the authentication that this api key should be based off of
      * @param request the request to create the api key included any permission restrictions
-     * @param userRoles the user's actual roles that we always enforce
+     * @param listOfUserRoles the user's actual roles that we always enforce
      * @param listener the listener that will be used to notify of completion
      */
-    public void createApiKey(Authentication authentication, CreateApiKeyRequest request, Set<RoleDescriptor> userRoles,
+    public void createApiKey(Authentication authentication, CreateApiKeyRequest request, List<Set<RoleDescriptor>> listOfUserRoles,
                              ActionListener<CreateApiKeyResponse> listener) {
         ensureEnabled();
         if (authentication == null) {
             listener.onFailure(new IllegalArgumentException("authentication must be provided"));
         } else {
-            createApiKeyAndIndexIt(authentication, request, userRoles, listener);
+            createApiKeyAndIndexIt(authentication, request, listOfUserRoles, listener);
         }
     }
 
-    private void createApiKeyAndIndexIt(Authentication authentication, CreateApiKeyRequest request, Set<RoleDescriptor> roleDescriptorSet,
+    private void createApiKeyAndIndexIt(Authentication authentication, CreateApiKeyRequest request,
+                                        List<Set<RoleDescriptor>> listOfRoleDescriptorSet,
                                         ActionListener<CreateApiKeyResponse> listener) {
         final Instant created = clock.instant();
         final Instant expiration = getApiKeyExpiration(created, request);
@@ -212,7 +214,7 @@ public class ApiKeyService {
                     Version.V_6_7_0);
         }
 
-        try (XContentBuilder builder = newDocument(apiKey, request.getName(), authentication, roleDescriptorSet, created, expiration,
+        try (XContentBuilder builder = newDocument(apiKey, request.getName(), authentication, listOfRoleDescriptorSet, created, expiration,
             request.getRoleDescriptors(), version)) {
             final IndexRequest indexRequest =
                 client.prepareIndex(SECURITY_MAIN_ALIAS, SINGLE_MAPPING_NAME)
@@ -233,7 +235,7 @@ public class ApiKeyService {
     /**
      * package protected for testing
      */
-    XContentBuilder newDocument(SecureString apiKey, String name, Authentication authentication, Set<RoleDescriptor> userRoles,
+    XContentBuilder newDocument(SecureString apiKey, String name, Authentication authentication, List<Set<RoleDescriptor>> listOfUserRoles,
                                         Instant created, Instant expiration, List<RoleDescriptor> keyRoles,
                                         Version version) throws IOException {
         XContentBuilder builder = XContentFactory.jsonBuilder();
@@ -267,12 +269,17 @@ public class ApiKeyService {
         builder.endObject();
 
         // Save limited_by_role_descriptors
-        builder.startObject("limited_by_role_descriptors");
-        for (RoleDescriptor descriptor : userRoles) {
-            builder.field(descriptor.getName(),
-                (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
+        builder.startArray("limited_by_role_descriptors");
+        for (Set<RoleDescriptor> roleDescriptors: listOfUserRoles) {
+            builder.startObject();
+            for (RoleDescriptor roleDescriptor : roleDescriptors) {
+                builder.field(roleDescriptor.getName(),
+                    (contentBuilder, params) -> roleDescriptor.toXContent(contentBuilder, params, true));
+            }
+            builder.endObject();
         }
-        builder.endObject();
+        builder.endArray();
+
 
         builder.field("name", name)
             .field("version", version.id)
@@ -354,17 +361,24 @@ public class ApiKeyService {
         final String apiKeyId = (String) metadata.get(API_KEY_ID_KEY);
 
         final Map<String, Object> roleDescriptors = (Map<String, Object>) metadata.get(API_KEY_ROLE_DESCRIPTORS_KEY);
-        final Map<String, Object> authnRoleDescriptors = (Map<String, Object>) metadata.get(API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY);
+        final List<Map<String, Object>> listOfAuthnRoleDescriptors = (List<Map<String, Object>>) metadata.get(API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY);
 
-        if (roleDescriptors == null && authnRoleDescriptors == null) {
+        if (roleDescriptors == null && listOfAuthnRoleDescriptors == null) {
             listener.onFailure(new ElasticsearchSecurityException("no role descriptors found for API key"));
         } else if (roleDescriptors == null || roleDescriptors.isEmpty()) {
-            final List<RoleDescriptor> authnRoleDescriptorsList = parseRoleDescriptors(apiKeyId, authnRoleDescriptors);
-            listener.onResponse(new ApiKeyRoleDescriptors(apiKeyId, authnRoleDescriptorsList, null));
+
+            listener.onResponse(new ApiKeyRoleDescriptors(apiKeyId, Collections.emptyList(),
+                listOfAuthnRoleDescriptors.stream()
+                    .map(e -> parseRoleDescriptors(apiKeyId, e))
+                    .map(HashSet::new)
+                    .collect(Collectors.toList())));
         } else {
             final List<RoleDescriptor> roleDescriptorList = parseRoleDescriptors(apiKeyId, roleDescriptors);
-            final List<RoleDescriptor> authnRoleDescriptorsList = parseRoleDescriptors(apiKeyId, authnRoleDescriptors);
-            listener.onResponse(new ApiKeyRoleDescriptors(apiKeyId, roleDescriptorList, authnRoleDescriptorsList));
+            listener.onResponse(new ApiKeyRoleDescriptors(apiKeyId, roleDescriptorList,
+                listOfAuthnRoleDescriptors.stream()
+                    .map(e -> parseRoleDescriptors(apiKeyId, e))
+                    .map(HashSet::new)
+                    .collect(Collectors.toList())));
         }
     }
 
@@ -372,12 +386,13 @@ public class ApiKeyService {
 
         private final String apiKeyId;
         private final List<RoleDescriptor> roleDescriptors;
-        private final List<RoleDescriptor> limitedByRoleDescriptors;
+        private final List<Set<RoleDescriptor>> listOfLimitedByRoleDescriptors;
 
-        public ApiKeyRoleDescriptors(String apiKeyId, List<RoleDescriptor> roleDescriptors, List<RoleDescriptor> limitedByDescriptors) {
+        public ApiKeyRoleDescriptors(String apiKeyId, List<RoleDescriptor> roleDescriptors,
+            List<Set<RoleDescriptor>> listOfLimitedByDescriptors) {
             this.apiKeyId = apiKeyId;
             this.roleDescriptors = roleDescriptors;
-            this.limitedByRoleDescriptors = limitedByDescriptors;
+            this.listOfLimitedByRoleDescriptors = listOfLimitedByDescriptors;
         }
 
         public String getApiKeyId() {
@@ -388,8 +403,8 @@ public class ApiKeyService {
             return roleDescriptors;
         }
 
-        public List<RoleDescriptor> getLimitedByRoleDescriptors() {
-            return limitedByRoleDescriptors;
+        public List<Set<RoleDescriptor>> getListOfLimitedByRoleDescriptors() {
+            return listOfLimitedByRoleDescriptors;
         }
     }
 
@@ -504,14 +519,14 @@ public class ApiKeyService {
             final String principal = Objects.requireNonNull((String) creator.get("principal"));
             final Map<String, Object> metadata = (Map<String, Object>) creator.get("metadata");
             final Map<String, Object> roleDescriptors = (Map<String, Object>) source.get("role_descriptors");
-            final Map<String, Object> limitedByRoleDescriptors = (Map<String, Object>) source.get("limited_by_role_descriptors");
+            final List<Map<String, Object>> listOfLimitedByRoleDescriptors = (List<Map<String, Object>>) source.get("limited_by_role_descriptors");
             final String[] roleNames = (roleDescriptors != null) ? roleDescriptors.keySet().toArray(Strings.EMPTY_ARRAY)
-                : limitedByRoleDescriptors.keySet().toArray(Strings.EMPTY_ARRAY);
+                : listOfLimitedByRoleDescriptors.get(0).keySet().toArray(Strings.EMPTY_ARRAY);
             final User apiKeyUser = new User(principal, roleNames, null, null, metadata, true);
             final Map<String, Object> authResultMetadata = new HashMap<>();
             authResultMetadata.put(API_KEY_CREATOR_REALM, creator.get("realm"));
             authResultMetadata.put(API_KEY_ROLE_DESCRIPTORS_KEY, roleDescriptors);
-            authResultMetadata.put(API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY, limitedByRoleDescriptors);
+            authResultMetadata.put(API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY, listOfLimitedByRoleDescriptors);
             authResultMetadata.put(API_KEY_ID_KEY, credentials.getId());
             listener.onResponse(AuthenticationResult.success(apiKeyUser, authResultMetadata));
         } else {
@@ -576,7 +591,7 @@ public class ApiKeyService {
         return enabled && licenseState.isApiKeyServiceAllowed();
     }
 
-    private void ensureEnabled() {
+    public void ensureEnabled() {
         if (licenseState.isApiKeyServiceAllowed() == false) {
             throw LicenseUtils.newComplianceException("api keys");
         }

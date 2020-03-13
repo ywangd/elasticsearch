@@ -419,14 +419,14 @@ public class ApiKeyServiceTests extends ESTestCase {
         service.getRoleForApiKey(authentication, roleFuture);
         ApiKeyRoleDescriptors result = roleFuture.get();
         if (emptyApiKeyRoleDescriptor) {
-            assertNull(result.getLimitedByRoleDescriptors());
+            assertNull(result.getListOfLimitedByRoleDescriptors());
             assertThat(result.getRoleDescriptors().size(), is(1));
             assertThat(result.getRoleDescriptors().get(0).getName(), is("limited role"));
         } else {
             assertThat(result.getRoleDescriptors().size(), is(1));
-            assertThat(result.getLimitedByRoleDescriptors().size(), is(1));
+            assertThat(result.getListOfLimitedByRoleDescriptors().size(), is(1));
             assertThat(result.getRoleDescriptors().get(0).getName(), is("a role"));
-            assertThat(result.getLimitedByRoleDescriptors().get(0).getName(), is("limited role"));
+            assertThat(result.getListOfLimitedByRoleDescriptors().get(0).getName(), is("limited role"));
         }
     }
 

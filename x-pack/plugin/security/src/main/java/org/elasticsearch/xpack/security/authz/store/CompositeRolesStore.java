@@ -30,10 +30,10 @@ import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor.IndicesPrivileges;
 import org.elasticsearch.xpack.core.security.authz.accesscontrol.DocumentSubsetBitsetCache;
+import org.elasticsearch.xpack.core.security.authz.permission.AndRole;
 import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsCache;
 import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsDefinition;
 import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsDefinition.FieldGrantExcludeGroup;
-import org.elasticsearch.xpack.core.security.authz.permission.LimitedRole;
 import org.elasticsearch.xpack.core.security.authz.permission.Role;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
@@ -219,14 +219,14 @@ public class CompositeRolesStore {
                 final List<RoleDescriptor> descriptors = apiKeyRoleDescriptors.getRoleDescriptors();
                 if (descriptors == null) {
                     roleActionListener.onFailure(new IllegalStateException("missing role descriptors"));
-                } else if (apiKeyRoleDescriptors.getLimitedByRoleDescriptors() == null) {
+                } else if (apiKeyRoleDescriptors.getListOfLimitedByRoleDescriptors() == null) {
                     buildAndCacheRoleFromDescriptors(descriptors, apiKeyRoleDescriptors.getApiKeyId() + "_role_desc", roleActionListener);
                 } else {
                     buildAndCacheRoleFromDescriptors(descriptors, apiKeyRoleDescriptors.getApiKeyId() + "_role_desc",
-                        ActionListener.wrap(role -> buildAndCacheRoleFromDescriptors(apiKeyRoleDescriptors.getLimitedByRoleDescriptors(),
-                            apiKeyRoleDescriptors.getApiKeyId() + "_limited_role_desc", ActionListener.wrap(
-                                limitedBy -> roleActionListener.onResponse(LimitedRole.createLimitedRole(role, limitedBy)),
-                                roleActionListener::onFailure)), roleActionListener::onFailure));
+                        ActionListener.wrap(role -> buildAndRole(apiKeyRoleDescriptors.getApiKeyId(),
+                            role, apiKeyRoleDescriptors.getListOfLimitedByRoleDescriptors(), roleActionListener),
+                            roleActionListener::onFailure)
+                    );
                 }
             }, roleActionListener::onFailure));
         } else {
@@ -246,6 +246,26 @@ public class CompositeRolesStore {
                 roles(roleNames, roleActionListener);
             }
         }
+    }
+
+    private void buildAndRole(String keyId, Role role, List<Set<RoleDescriptor>> listOfRoleDescriptors,
+        ActionListener<Role> roleActionListener) {
+
+        if (listOfRoleDescriptors.isEmpty()) {
+            roleActionListener.onResponse(role);
+            return;
+        }
+
+        final Set<RoleDescriptor> roleDescriptors = listOfRoleDescriptors.remove(listOfRoleDescriptors.size() - 1);
+
+        buildAndCacheRoleFromDescriptors(roleDescriptors, keyId + "_limited_role_desc_" + listOfRoleDescriptors.size(), ActionListener.wrap(
+            limitedBy -> {
+                final AndRole andRole = AndRole.createAndRole(role, limitedBy);
+                buildAndRole(keyId, andRole, listOfRoleDescriptors, roleActionListener);
+            },
+            roleActionListener::onFailure
+        ));
+
     }
 
     public void buildAndCacheRoleFromDescriptors(Collection<RoleDescriptor> roleDescriptors, String source,
