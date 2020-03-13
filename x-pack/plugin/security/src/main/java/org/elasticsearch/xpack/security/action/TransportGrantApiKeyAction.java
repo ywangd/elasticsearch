@@ -10,6 +10,7 @@ import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.client.Client;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
@@ -41,9 +42,9 @@ public final class TransportGrantApiKeyAction extends HandledTransportAction<Gra
     @Inject
     public TransportGrantApiKeyAction(TransportService transportService, ActionFilters actionFilters, ThreadPool threadPool,
                                       ApiKeyService apiKeyService, AuthenticationService authenticationService, TokenService tokenService,
-                                      CompositeRolesStore rolesStore, NamedXContentRegistry xContentRegistry) {
+                                      CompositeRolesStore rolesStore, NamedXContentRegistry xContentRegistry, Client client) {
         this(transportService, actionFilters, threadPool.getThreadContext(),
-            new ApiKeyGenerator(apiKeyService, rolesStore, xContentRegistry), authenticationService, tokenService
+            new ApiKeyGenerator(apiKeyService, rolesStore, xContentRegistry, client), authenticationService, tokenService
         );
     }
 

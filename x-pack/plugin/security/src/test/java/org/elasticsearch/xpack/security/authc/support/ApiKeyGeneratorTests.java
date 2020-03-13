@@ -20,6 +20,7 @@ import org.elasticsearch.xpack.core.security.user.User;
 import org.elasticsearch.xpack.security.authc.ApiKeyService;
 import org.elasticsearch.xpack.security.authz.store.CompositeRolesStore;
 
+import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -37,7 +38,7 @@ public class ApiKeyGeneratorTests extends ESTestCase {
     public void testGenerateApiKeySuccessfully() {
         final ApiKeyService apiKeyService = mock(ApiKeyService.class);
         final CompositeRolesStore rolesStore = mock(CompositeRolesStore.class);
-        final ApiKeyGenerator generator = new ApiKeyGenerator(apiKeyService, rolesStore, NamedXContentRegistry.EMPTY);
+        final ApiKeyGenerator generator = new ApiKeyGenerator(apiKeyService, rolesStore, NamedXContentRegistry.EMPTY, null);
         final Set<String> userRoleNames = Sets.newHashSet(randomArray(1, 4, String[]::new, () -> randomAlphaOfLengthBetween(3, 12)));
         final Authentication authentication = new Authentication(
             new User("test", userRoleNames.toArray(String[]::new)),
@@ -75,7 +76,8 @@ public class ApiKeyGeneratorTests extends ESTestCase {
             listener.onResponse(response);
 
             return null;
-        }).when(apiKeyService).createApiKey(same(authentication), same(request), anySetOf(RoleDescriptor.class), any(ActionListener.class));
+        }).when(apiKeyService).createApiKey(same(authentication), same(request), Collections.singletonList(anySetOf(RoleDescriptor.class)),
+            any(ActionListener.class));
 
         final PlainActionFuture<CreateApiKeyResponse> future = new PlainActionFuture<>();
         generator.generateApiKey(authentication, request, future);

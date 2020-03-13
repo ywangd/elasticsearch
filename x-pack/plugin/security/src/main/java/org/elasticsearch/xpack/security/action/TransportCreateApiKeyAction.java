@@ -9,6 +9,7 @@ package org.elasticsearch.xpack.security.action;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.client.Client;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.tasks.Task;
@@ -32,9 +33,10 @@ public final class TransportCreateApiKeyAction extends HandledTransportAction<Cr
 
     @Inject
     public TransportCreateApiKeyAction(TransportService transportService, ActionFilters actionFilters, ApiKeyService apiKeyService,
-                                       SecurityContext context, CompositeRolesStore rolesStore, NamedXContentRegistry xContentRegistry) {
+                                       SecurityContext context, CompositeRolesStore rolesStore, NamedXContentRegistry xContentRegistry,
+                                       Client client) {
         super(CreateApiKeyAction.NAME, transportService, actionFilters, CreateApiKeyRequest::new);
-        this.generator = new ApiKeyGenerator(apiKeyService, rolesStore, xContentRegistry);
+        this.generator = new ApiKeyGenerator(apiKeyService, rolesStore, xContentRegistry, client);
         this.securityContext = context;
     }
 
