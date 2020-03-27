@@ -19,6 +19,7 @@
 
 package org.elasticsearch.action.bulk;
 
+import org.HdrHistogram.Recorder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -26,6 +27,7 @@ import org.apache.lucene.util.SparseFixedBitSet;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.RecordJFR;
 import org.elasticsearch.ResourceAlreadyExistsException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
@@ -85,6 +87,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 
@@ -107,6 +110,11 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
     private final NodeClient client;
     private final IndexNameExpressionResolver indexNameExpressionResolver;
     private static final String DROPPED_ITEM_WITH_AUTO_GENERATED_ID = "auto-generated";
+
+    private final Recorder bulkRecorder = new Recorder(1, TimeUnit.SECONDS.toMicros(60),  3);
+    private final Recorder bulkShardSuccessRecorder = new Recorder(1, TimeUnit.SECONDS.toMicros(60),  3);
+    private final Recorder bulkShardFailedRecorder = new Recorder(1, TimeUnit.SECONDS.toMicros(60),  3);
+    private final Recorder bulkPrepRecorder = new Recorder(1, TimeUnit.SECONDS.toMicros(60),  3);
 
     @Inject
     public TransportBulkAction(ThreadPool threadPool, TransportService transportService,
@@ -132,6 +140,10 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         this.client = client;
         this.indexNameExpressionResolver = indexNameExpressionResolver;
         clusterService.addStateApplier(this.ingestForwarder);
+        RecordJFR.scheduleHistogramSample("TransportBulkActionSynchronous", threadPool, new AtomicReference<>(bulkPrepRecorder));
+        RecordJFR.scheduleHistogramSample("TransportBulkAction", threadPool, new AtomicReference<>(bulkRecorder));
+        RecordJFR.scheduleHistogramSample("TransportShardBulkAction#Success", threadPool, new AtomicReference<>(bulkShardSuccessRecorder));
+        RecordJFR.scheduleHistogramSample("TransportShardBulkAction#Failed", threadPool, new AtomicReference<>(bulkShardFailedRecorder));
     }
 
     /**
@@ -492,6 +504,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 if (task != null) {
                     bulkShardRequest.setParentTask(nodeId, task.getId());
                 }
+                final long bulkShardStartNanos = System.nanoTime();
                 client.executeLocally(TransportShardBulkAction.TYPE, bulkShardRequest, new ActionListener<>() {
                     @Override
                     public void onResponse(BulkShardResponse bulkShardResponse) {
@@ -502,8 +515,14 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                             }
                             responses.set(bulkItemResponse.getItemId(), bulkItemResponse);
                         }
+
+                        long endTime = relativeTime();
+                        long nanosTook = endTime - startTimeNanos;
+                        long bulkShardMicrosTook = RecordJFR.toMicrosMaxMinute(endTime - bulkShardStartNanos);
+                        bulkShardSuccessRecorder.recordValue(bulkShardMicrosTook);
+
                         if (counter.decrementAndGet() == 0) {
-                            finishHim();
+                            finishHim(nanosTook);
                         }
                     }
 
@@ -516,16 +535,24 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                             responses.set(request.id(), new BulkItemResponse(request.id(), docWriteRequest.opType(),
                                     new BulkItemResponse.Failure(indexName, docWriteRequest.id(), e)));
                         }
+
+                        long endTime = relativeTime();
+                        long nanosTook = endTime - startTimeNanos;
+                        long bulkShardMicrosTook = RecordJFR.toMicrosMaxMinute(endTime - bulkShardStartNanos);
+                        bulkShardFailedRecorder.recordValue(bulkShardMicrosTook);
+
                         if (counter.decrementAndGet() == 0) {
-                            finishHim();
+                            finishHim(nanosTook);
                         }
                     }
 
-                    private void finishHim() {
+                    private void finishHim(long nanosTook) {
+                        bulkRecorder.recordValue(RecordJFR.toMicrosMaxMinute(nanosTook));
                         listener.onResponse(new BulkResponse(responses.toArray(new BulkItemResponse[responses.length()]),
-                            buildTookInMillis(startTimeNanos)));
+                            TimeUnit.NANOSECONDS.toMillis(nanosTook)));
                     }
                 });
+                bulkPrepRecorder.recordValue(RecordJFR.toMicrosMaxMinute(relativeTime() - startTimeNanos));
             }
         }
 

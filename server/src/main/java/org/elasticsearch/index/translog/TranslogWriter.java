@@ -21,15 +21,18 @@ package org.elasticsearch.index.translog;
 
 import com.carrotsearch.hppc.LongArrayList;
 import com.carrotsearch.hppc.procedures.LongProcedure;
+import org.HdrHistogram.Recorder;
 import org.apache.lucene.store.AlreadyClosedException;
-import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.Assertions;
+import org.elasticsearch.RecordJFR;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.io.Channels;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.core.internal.io.IOUtils;
 import org.elasticsearch.index.seqno.SequenceNumbers;
+import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
 
 import java.io.BufferedOutputStream;
@@ -373,8 +376,14 @@ public class TranslogWriter extends BaseTranslogReader implements Closeable {
                     // now do the actual fsync outside of the synchronized block such that
                     // we can continue writing to the buffer etc.
                     try {
+                        long startNanos = System.nanoTime();
                         channel.force(false);
                         writeCheckpoint(channelFactory, path.getParent(), checkpointToSync);
+                        // Record both translog and checkpoint force
+                        Recorder fsyncRecorder = IndexShard.fsyncRecorder;
+                        if (fsyncRecorder != null) {
+                            fsyncRecorder.recordValue(RecordJFR.toMicrosMaxMinute(System.nanoTime() - startNanos));
+                        }
                     } catch (final Exception ex) {
                         closeWithTragicEvent(ex);
                         throw ex;

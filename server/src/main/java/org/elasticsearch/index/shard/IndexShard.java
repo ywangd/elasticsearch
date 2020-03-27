@@ -20,6 +20,7 @@
 package org.elasticsearch.index.shard;
 
 import com.carrotsearch.hppc.ObjectLongMap;
+import org.HdrHistogram.Recorder;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.index.CheckIndex;
@@ -40,6 +41,7 @@ import org.apache.lucene.util.ThreadInterruptedException;
 import org.elasticsearch.Assertions;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.RecordJFR;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRunnable;
@@ -270,6 +272,21 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     private final AtomicReference<Translog.Location> pendingRefreshLocation = new AtomicReference<>();
     private volatile boolean useRetentionLeasesInPeerRecovery;
 
+    public static volatile Recorder fsyncRecorder;
+    public static volatile Recorder luceneIndexRecorder;
+    public static volatile Recorder translogAddRecorder;
+
+    private static synchronized void initialize(ThreadPool threadPool) {
+        if (fsyncRecorder == null) {
+            fsyncRecorder = new Recorder(1, TimeUnit.SECONDS.toMicros(60),  3);
+            luceneIndexRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(1),  3);
+            translogAddRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(1),  3);
+            RecordJFR.scheduleHistogramSample("IndexShard#Fsync", threadPool, new AtomicReference<>(fsyncRecorder));
+            RecordJFR.scheduleHistogramSample("IndexShard#Lucene", threadPool, new AtomicReference<>(luceneIndexRecorder));
+            RecordJFR.scheduleHistogramSample("Translog#Add", threadPool, new AtomicReference<>(translogAddRecorder));
+        }
+    }
+
     public IndexShard(
             final ShardRouting shardRouting,
             final IndexSettings indexSettings,
@@ -291,6 +308,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
             final RetentionLeaseSyncer retentionLeaseSyncer,
             final CircuitBreakerService circuitBreakerService) throws IOException {
         super(shardRouting.shardId(), indexSettings);
+        initialize(threadPool);
         assert shardRouting.initializing();
         this.shardRouting = shardRouting;
         final Settings settings = indexSettings.getSettings();
