@@ -19,6 +19,8 @@
 
 package org.elasticsearch.http;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -54,11 +56,14 @@ public class DefaultRestChannel extends AbstractRestChannel implements RestChann
     static final String CONTENT_LENGTH = "content-length";
     static final String SET_COOKIE = "set-cookie";
 
+    private static final Logger logger = LogManager.getLogger(DefaultRestChannel.class);
+
     private final HttpRequest httpRequest;
     private final BigArrays bigArrays;
     private final HttpHandlingSettings settings;
     private final ThreadContext threadContext;
     private final HttpChannel httpChannel;
+    private final long startTime;
 
     DefaultRestChannel(HttpChannel httpChannel, HttpRequest httpRequest, RestRequest request, BigArrays bigArrays,
                        HttpHandlingSettings settings, ThreadContext threadContext) {
@@ -68,6 +73,7 @@ public class DefaultRestChannel extends AbstractRestChannel implements RestChann
         this.bigArrays = bigArrays;
         this.settings = settings;
         this.threadContext = threadContext;
+        this.startTime = System.nanoTime();
     }
 
     @Override
@@ -127,6 +133,10 @@ public class DefaultRestChannel extends AbstractRestChannel implements RestChann
             }
 
             ActionListener<Void> listener = ActionListener.wrap(() -> Releasables.close(toClose));
+            if (opaque != null) {
+                logger.warn("rest: request [{}] [skip] [{}]. Took [{}]",
+                    opaque, request.uri(), System.nanoTime() - startTime);
+            }
             httpChannel.sendResponse(httpResponse, listener);
             success = true;
         } finally {

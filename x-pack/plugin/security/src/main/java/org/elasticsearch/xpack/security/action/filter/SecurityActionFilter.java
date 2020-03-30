@@ -20,6 +20,7 @@ import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.action.support.ActionFilterChain;
 import org.elasticsearch.action.support.ContextPreservingActionListener;
 import org.elasticsearch.action.support.DestructiveOperations;
+import org.elasticsearch.common.TriConsumer;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.license.LicenseUtils;
 import org.elasticsearch.license.XPackLicenseState;
@@ -38,6 +39,8 @@ import org.elasticsearch.xpack.security.authz.AuthorizationUtils;
 
 import java.io.IOException;
 import java.util.function.Predicate;
+
+import static org.elasticsearch.xpack.core.security.SecurityHelper.getAuthRecorder;
 
 public class SecurityActionFilter implements ActionFilter {
 
@@ -152,9 +155,12 @@ public class SecurityActionFilter implements ActionFilter {
          here if a request is not associated with any other user.
          */
         final String securityAction = actionMapper.action(action, request);
+        final TriConsumer<ThreadContext, Logger, String> authenticateRecorder = getAuthRecorder(
+            "authenticate");
         authcService.authenticate(securityAction, request, SystemUser.INSTANCE,
                 ActionListener.wrap((authc) -> {
                     if (authc != null) {
+                        authenticateRecorder.apply(threadContext, logger, securityAction);
                         authorizeRequest(authc, securityAction, request, listener);
                     } else if (licenseState.isAuthAllowed() == false) {
                         listener.onResponse(null);
@@ -169,8 +175,13 @@ public class SecurityActionFilter implements ActionFilter {
         if (authentication == null) {
             listener.onFailure(new IllegalArgumentException("authentication must be non null for authorization"));
         } else {
-            authzService.authorize(authentication, securityAction, request, ActionListener.wrap(ignore -> listener.onResponse(null),
-                listener::onFailure));
+            final TriConsumer<ThreadContext, Logger, String> authorizeRecorder = getAuthRecorder("authorize");
+            final ActionListener<Void> wrappedListener = ActionListener.wrap((e) -> {
+                authorizeRecorder.apply(threadContext, logger, securityAction);
+                listener.onResponse(e);
+            }, listener::onFailure);
+            authzService.authorize(authentication, securityAction, request, ActionListener.wrap(ignore -> wrappedListener.onResponse(null),
+                wrappedListener::onFailure));
         }
     }
 }

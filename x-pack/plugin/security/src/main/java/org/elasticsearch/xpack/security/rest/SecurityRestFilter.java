@@ -11,6 +11,7 @@ import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.logging.log4j.util.Supplier;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.node.NodeClient;
+import org.elasticsearch.common.TriConsumer;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.http.HttpChannel;
 import org.elasticsearch.license.XPackLicenseState;
@@ -24,6 +25,8 @@ import org.elasticsearch.xpack.security.authc.AuthenticationService;
 import org.elasticsearch.xpack.security.transport.SSLEngineUtils;
 
 import java.io.IOException;
+
+import static org.elasticsearch.xpack.core.security.SecurityHelper.getAuthRecorder;
 
 public class SecurityRestFilter implements RestHandler {
 
@@ -52,11 +55,13 @@ public class SecurityRestFilter implements RestHandler {
                 HttpChannel httpChannel = request.getHttpChannel();
                 SSLEngineUtils.extractClientCertificates(logger, threadContext, httpChannel);
             }
+            final TriConsumer<ThreadContext, Logger, String> authenticateRecorder = getAuthRecorder("authenticate");
             service.authenticate(maybeWrapRestRequest(request), ActionListener.wrap(
                 authentication -> {
                     if (authentication == null) {
                         logger.trace("No authentication available for REST request [{}]", request.uri());
                     } else {
+                        authenticateRecorder.apply(threadContext, logger, request.uri());
                         logger.trace("Authenticated REST request [{}] as {}", request.uri(), authentication);
                     }
                     RemoteHostHeader.process(request, threadContext);

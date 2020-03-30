@@ -49,8 +49,7 @@ public class RetentionLeaseSyncer {
         syncAction.sync(shardId, primaryAllocationId, primaryTerm, retentionLeases, listener);
     }
 
-    public void backgroundSync(ShardId shardId, String primaryAllocationId, long primaryTerm, RetentionLeases retentionLeases) {
-        backgroundSyncAction.backgroundSync(shardId, primaryAllocationId, primaryTerm, retentionLeases);
+    public void backgroundSync(ShardId shardId, String primaryAllocationId, long primaryTerm, RetentionLeases retentionLeases) { backgroundSyncAction.backgroundSync(shardId, primaryAllocationId, primaryTerm, retentionLeases);
     }
 
     /**

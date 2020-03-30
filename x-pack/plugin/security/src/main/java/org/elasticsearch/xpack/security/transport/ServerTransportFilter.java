@@ -14,6 +14,7 @@ import org.elasticsearch.action.admin.indices.close.CloseIndexAction;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexAction;
 import org.elasticsearch.action.admin.indices.open.OpenIndexAction;
 import org.elasticsearch.action.support.DestructiveOperations;
+import org.elasticsearch.common.TriConsumer;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.license.XPackLicenseState;
 import org.elasticsearch.transport.TaskTransportChannel;
@@ -34,6 +35,7 @@ import org.elasticsearch.xpack.security.authz.AuthorizationService;
 
 import java.io.IOException;
 
+import static org.elasticsearch.xpack.core.security.SecurityHelper.getAuthRecorder;
 import static org.elasticsearch.xpack.core.security.support.Exceptions.authenticationError;
 
 /**
@@ -118,16 +120,24 @@ public interface ServerTransportFilter {
             }
 
             final Version version = transportChannel.getVersion();
+
+            final TriConsumer<ThreadContext, Logger, String> authenticateRecorder = getAuthRecorder("authenticate");
             authcService.authenticate(securityAction, request, (User)null, ActionListener.wrap((authentication) -> {
                 if (authentication != null) {
+                    authenticateRecorder.apply(threadContext, logger, securityAction);
+                    final TriConsumer<ThreadContext, Logger, String> authorizationRecorder = getAuthRecorder("authorize");
+                    final ActionListener<Void> wrappedListener = ActionListener.wrap((e) -> {
+                        authorizationRecorder.apply(threadContext, logger, securityAction);
+                        listener.onResponse(e);
+                    }, listener::onFailure);
                     if (securityAction.equals(TransportService.HANDSHAKE_ACTION_NAME) &&
                         SystemUser.is(authentication.getUser()) == false) {
                         securityContext.executeAsUser(SystemUser.INSTANCE, (ctx) -> {
                             final Authentication replaced = Authentication.getAuthentication(threadContext);
-                            authzService.authorize(replaced, securityAction, request, listener);
+                            authzService.authorize(replaced, securityAction, request, wrappedListener);
                         }, version);
                     } else {
-                        authzService.authorize(authentication, securityAction, request, listener);
+                        authzService.authorize(authentication, securityAction, request, wrappedListener);
                     }
                 } else if (licenseState.isAuthAllowed() == false) {
                     listener.onResponse(null);
@@ -164,5 +174,7 @@ public interface ServerTransportFilter {
             super.inbound(action, request, transportChannel, listener);
         }
     }
+
+
 
 }
