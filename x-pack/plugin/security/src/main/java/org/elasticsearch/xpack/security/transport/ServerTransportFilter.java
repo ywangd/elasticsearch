@@ -14,7 +14,6 @@ import org.elasticsearch.action.admin.indices.close.CloseIndexAction;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexAction;
 import org.elasticsearch.action.admin.indices.open.OpenIndexAction;
 import org.elasticsearch.action.support.DestructiveOperations;
-import org.elasticsearch.common.TriConsumer;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.license.XPackLicenseState;
 import org.elasticsearch.transport.TaskTransportChannel;
@@ -34,6 +33,7 @@ import org.elasticsearch.xpack.security.authc.AuthenticationService;
 import org.elasticsearch.xpack.security.authz.AuthorizationService;
 
 import java.io.IOException;
+import java.util.function.BiConsumer;
 
 import static org.elasticsearch.xpack.core.security.SecurityHelper.getAuthRecorder;
 import static org.elasticsearch.xpack.core.security.support.Exceptions.authenticationError;
@@ -121,13 +121,13 @@ public interface ServerTransportFilter {
 
             final Version version = transportChannel.getVersion();
 
-            final TriConsumer<ThreadContext, Logger, String> authenticateRecorder = getAuthRecorder("authenticate");
+            final BiConsumer<Logger, String> authenticateRecorder = getAuthRecorder(threadContext, true);
             authcService.authenticate(securityAction, request, (User)null, ActionListener.wrap((authentication) -> {
                 if (authentication != null) {
-                    authenticateRecorder.apply(threadContext, logger, securityAction);
-                    final TriConsumer<ThreadContext, Logger, String> authorizationRecorder = getAuthRecorder("authorize");
+                    authenticateRecorder.accept(logger, securityAction);
+                    final BiConsumer<Logger, String> authorizationRecorder = getAuthRecorder(threadContext, false);
                     final ActionListener<Void> wrappedListener = ActionListener.wrap((e) -> {
-                        authorizationRecorder.apply(threadContext, logger, securityAction);
+                        authorizationRecorder.accept(logger, securityAction);
                         listener.onResponse(e);
                     }, listener::onFailure);
                     if (securityAction.equals(TransportService.HANDSHAKE_ACTION_NAME) &&

@@ -416,6 +416,7 @@ configure(subprojects.findAll { ['archives', 'packages'].contains(it.name) }) {
 testClusters {
   runTask {
     testDistribution = System.getProperty('run.distribution', 'default')
+    jvmArgs '-XX:StartFlightRecording=maxsize=0,maxage=0s,disk=true,dumponexit=true,settings=default,filename=/Users/ywangd/projects/elastic/elasticsearch-7.6.0/tmp.jfr'
     if (System.getProperty('run.distribution', 'default') == 'default') {
       String licenseType = System.getProperty("run.license_type", "basic")
       if (licenseType == 'trial') {
