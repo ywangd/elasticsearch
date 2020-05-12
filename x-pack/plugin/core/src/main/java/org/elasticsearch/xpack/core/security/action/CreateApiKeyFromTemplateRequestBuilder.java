@@ -32,7 +32,7 @@ public final class CreateApiKeyFromTemplateRequestBuilder extends ActionRequestB
     }
 
     public CreateApiKeyFromTemplateRequestBuilder setTemplateId(String templateId) {
-        request.setTemplateId(templateId);
+        request.setTemplateName(templateId);
         return this;
     }
 

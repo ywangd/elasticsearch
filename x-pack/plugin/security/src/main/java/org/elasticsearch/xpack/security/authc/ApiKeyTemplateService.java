@@ -64,8 +64,6 @@ import org.elasticsearch.xpack.core.security.ScrollHelper;
 import org.elasticsearch.xpack.core.security.action.ApiKey;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateRequest;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateResponse;
-import org.elasticsearch.xpack.core.security.action.CreateApiKeyRequest;
-import org.elasticsearch.xpack.core.security.action.CreateApiKeyResponse;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyTemplateRequest;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyTemplateResponse;
 import org.elasticsearch.xpack.core.security.action.GetApiKeyResponse;
@@ -279,7 +277,7 @@ public class ApiKeyTemplateService {
 
     public void createApiKeyFromTemplateTemplate(Authentication authentication, CreateApiKeyFromTemplateRequest request,
         ActionListener<CreateApiKeyFromTemplateResponse> listener) {
-        final GetRequest getRequest = client.prepareGet(SECURITY_MAIN_ALIAS, request.getTemplateId())
+        final GetRequest getRequest = client.prepareGet(SECURITY_MAIN_ALIAS, "api_key_template:" + request.getTemplateName())
             .setFetchSource(true)
             .request();
         executeAsyncWithOrigin(client, SECURITY_ORIGIN, GetAction.INSTANCE, getRequest, ActionListener.wrap(
@@ -327,7 +325,7 @@ public class ApiKeyTemplateService {
         final Version version = clusterService.state().nodes().getMinNodeVersion();
 
         try (XContentBuilder builder = newDocument(apiKey, request.getName(), authentication,
-            roleDescriptorSet, limitedByRoleDescriptorSet, request.getTemplateId(), templateLastModified,
+            roleDescriptorSet, limitedByRoleDescriptorSet, request.getTemplateName(), templateLastModified,
             created, expirationTime, version)) {
             final IndexRequest indexRequest =
                 client.prepareIndex(SECURITY_MAIN_ALIAS)

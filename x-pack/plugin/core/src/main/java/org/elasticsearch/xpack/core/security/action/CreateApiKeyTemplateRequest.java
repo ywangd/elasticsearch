@@ -6,7 +6,6 @@
 
 package org.elasticsearch.xpack.core.security.action;
 
-import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.support.WriteRequest;
@@ -23,11 +22,7 @@ import java.util.Objects;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
 
-/**
- * Request class used for the creation of an API key. The request requires a name to be provided
- * and optionally an expiration time and permission limitation can be provided.
- */
-public final class CreateApiKeyTemplateRequest extends ActionRequest {
+public final class CreateApiKeyTemplateRequest extends ActionRequest implements ApiKeyTemplateRequest {
     public static final WriteRequest.RefreshPolicy DEFAULT_REFRESH_POLICY = WriteRequest.RefreshPolicy.WAIT_UNTIL;
 
     private String name;
@@ -38,12 +33,6 @@ public final class CreateApiKeyTemplateRequest extends ActionRequest {
 
     public CreateApiKeyTemplateRequest() {}
 
-    /**
-     * Create API Key request constructor
-     * @param name name for the API key
-     * @param roleDescriptors list of {@link RoleDescriptor}s
-     * @param expiration to specify expiration for the API key
-     */
     public CreateApiKeyTemplateRequest(@Nullable String name, @Nullable List<RoleDescriptor> roleDescriptors,
         @Nullable TimeValue expiration, @Nullable TimeValue keyExpiration) {
         this.name = name;
@@ -67,6 +56,11 @@ public final class CreateApiKeyTemplateRequest extends ActionRequest {
 
     public void setName(@Nullable String name) {
         this.name = name;
+    }
+
+    @Override
+    public String getTemplateName() {
+        return name;
     }
 
     public TimeValue getExpiration() {

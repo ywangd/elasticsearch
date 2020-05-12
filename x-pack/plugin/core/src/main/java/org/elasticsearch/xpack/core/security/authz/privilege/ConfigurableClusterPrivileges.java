@@ -16,6 +16,7 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParseException;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.transport.TransportRequest;
+import org.elasticsearch.xpack.core.security.action.ApiKeyTemplateRequest;
 import org.elasticsearch.xpack.core.security.action.privilege.ApplicationPrivilegesRequest;
 import org.elasticsearch.xpack.core.security.authz.permission.ClusterPermission;
 import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege.Category;
@@ -29,6 +30,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -91,13 +93,24 @@ public final class ConfigurableClusterPrivileges {
         while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             expectedToken(parser.currentToken(), parser, XContentParser.Token.FIELD_NAME);
 
-            expectFieldName(parser, Category.APPLICATION.field);
+            final Category category = matchCategoryFieldName(parser);
             expectedToken(parser.nextToken(), parser, XContentParser.Token.START_OBJECT);
-            expectedToken(parser.nextToken(), parser, XContentParser.Token.FIELD_NAME);
-
-            expectFieldName(parser, ManageApplicationPrivileges.Fields.MANAGE);
-            privileges.add(ManageApplicationPrivileges.parse(parser));
-            expectedToken(parser.nextToken(), parser, XContentParser.Token.END_OBJECT);
+            if (parser.nextToken() != XContentParser.Token.END_OBJECT) {
+                expectedToken(parser.currentToken(), parser, XContentParser.Token.FIELD_NAME);
+                switch (category) {
+                    case APPLICATION:
+                        expectFieldName(parser, ManageApplicationPrivileges.Fields.MANAGE);
+                        privileges.add(ManageApplicationPrivileges.parse(parser));
+                        break;
+                    case API_KEY_TEMPLATE:
+                        expectFieldName(parser, ManageApiKeyTemplatePrivilege.Fields.MANAGE);
+                        privileges.add(ManageApiKeyTemplatePrivilege.parse(parser));
+                        break;
+                    default:
+                        throw new IllegalStateException(String.format(Locale.ROOT, "Unhandled category: %s", category));
+                }
+                expectedToken(parser.nextToken(), parser, XContentParser.Token.END_OBJECT);
+            }
         }
 
         return privileges;
@@ -117,6 +130,18 @@ public final class ConfigurableClusterPrivileges {
                 "failed to parse privilege. expected " + (fields.length == 1 ? "field name" : "one of") + " ["
                     + Strings.arrayToCommaDelimitedString(fields) + "] but found [" + fieldName + "] instead");
         }
+    }
+
+    private static Category matchCategoryFieldName(XContentParser parser) throws IOException {
+        final String fieldName = parser.currentName();
+        for (Category category : Category.values()) {
+            if (category.field.match(fieldName, parser.getDeprecationHandler())) {
+                return category;
+            }
+        }
+        throw new XContentParseException(parser.getTokenLocation(),
+            "failed to parse privilege. expected " + (Category.values().length == 1 ? "field name" : "one of") + " ["
+                + Strings.arrayToCommaDelimitedString(Category.values()) + "] but found [" + fieldName + "] instead");
     }
 
     /**
@@ -220,6 +245,103 @@ public final class ConfigurableClusterPrivileges {
         private interface Fields {
             ParseField MANAGE = new ParseField("manage");
             ParseField APPLICATIONS = new ParseField("applications");
+        }
+    }
+
+    public static class ManageApiKeyTemplatePrivilege implements ConfigurableClusterPrivilege {
+        public static final String WRITEABLE_NAME = "manage-api-key-template-privileges";
+
+        private final Set<String> templateNames;
+        private final Predicate<String> templatePredicate;
+        private final Predicate<TransportRequest> requestPredicate;
+
+        public ManageApiKeyTemplatePrivilege(Set<String> templateNames) {
+            this.templateNames = Collections.unmodifiableSet(templateNames);
+            this.templatePredicate = Automatons.predicate(this.templateNames);
+            this.requestPredicate = request -> {
+                if (request instanceof ApiKeyTemplateRequest) {
+                    final ApiKeyTemplateRequest templateRequest = (ApiKeyTemplateRequest) request;
+                    templateRequest.getTemplateName();
+                    return this.templateNames.contains("*") || templatePredicate.test(templateRequest.getTemplateName());
+                }
+                return false;
+            };
+        }
+
+        @Override
+        public Category getCategory() {
+            return Category.API_KEY_TEMPLATE;
+        }
+
+        public Collection<String> getTemplateNames() {
+            return Collections.unmodifiableCollection(this.templateNames);
+        }
+
+        @Override
+        public String getWriteableName() {
+            return WRITEABLE_NAME;
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            out.writeCollection(this.templateNames, StreamOutput::writeString);
+        }
+
+        public static ManageApiKeyTemplatePrivilege createFrom(StreamInput in) throws IOException {
+            final Set<String> templates = in.readSet(StreamInput::readString);
+            return new ManageApiKeyTemplatePrivilege(templates);
+        }
+
+        @Override
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            return builder.field(Fields.MANAGE.getPreferredName(),
+                Collections.singletonMap(Fields.TEMPLATES.getPreferredName(), templateNames)
+            );
+        }
+
+        public static ManageApiKeyTemplatePrivilege parse(XContentParser parser) throws IOException {
+            expectedToken(parser.currentToken(), parser, XContentParser.Token.FIELD_NAME);
+            expectFieldName(parser, Fields.MANAGE);
+            expectedToken(parser.nextToken(), parser, XContentParser.Token.START_OBJECT);
+            expectedToken(parser.nextToken(), parser, XContentParser.Token.FIELD_NAME);
+            expectFieldName(parser, Fields.TEMPLATES);
+            expectedToken(parser.nextToken(), parser, XContentParser.Token.START_ARRAY);
+            final String[] templates = XContentUtils.readStringArray(parser, false);
+            expectedToken(parser.nextToken(), parser, XContentParser.Token.END_OBJECT);
+            return new ManageApiKeyTemplatePrivilege(new LinkedHashSet<>(Arrays.asList(templates)));
+        }
+
+        @Override
+        public String toString() {
+            return "{" + getCategory() + ":" + Fields.MANAGE.getPreferredName() + ":" + Fields.TEMPLATES.getPreferredName() + "="
+                + Strings.collectionToDelimitedString(templateNames, ",") + "}";
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            final ManageApiKeyTemplatePrivilege that = (ManageApiKeyTemplatePrivilege) o;
+            return this.templateNames.equals(that.templateNames);
+        }
+
+        @Override
+        public int hashCode() {
+            return templateNames.hashCode();
+        }
+
+        @Override
+        public ClusterPermission.Builder buildPermission(final ClusterPermission.Builder builder) {
+            return builder.add(this, Set.of("cluster:admin/xpack/security/api_key_template/*"), requestPredicate);
+        }
+
+        private interface Fields {
+            ParseField MANAGE = new ParseField("manage");
+            ParseField TEMPLATES = new ParseField("templates");
         }
     }
 }

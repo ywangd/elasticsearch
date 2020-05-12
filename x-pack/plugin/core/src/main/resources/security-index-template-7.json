@@ -137,6 +137,19 @@
                   }
                 }
               }
+            },
+            "api_key_template": {
+              "type": "object",
+              "properties": {
+                "manage": {
+                  "type": "object",
+                  "properties": {
+                    "templates": {
+                      "type": "keyword"
+                    }
+                  }
+                }
+              }
             }
           }
         },

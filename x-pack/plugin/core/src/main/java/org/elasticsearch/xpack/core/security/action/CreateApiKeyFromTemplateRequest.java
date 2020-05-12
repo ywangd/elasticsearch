@@ -12,33 +12,29 @@ import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
 
 import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
 
-public final class CreateApiKeyFromTemplateRequest extends ActionRequest {
+public final class CreateApiKeyFromTemplateRequest extends ActionRequest implements ApiKeyTemplateRequest {
     public static final WriteRequest.RefreshPolicy DEFAULT_REFRESH_POLICY = WriteRequest.RefreshPolicy.WAIT_UNTIL;
 
-    private String templateId;
+    private String templateName;
     private String name;
     private WriteRequest.RefreshPolicy refreshPolicy = DEFAULT_REFRESH_POLICY;
 
     public CreateApiKeyFromTemplateRequest() {}
 
-    public CreateApiKeyFromTemplateRequest(String templateId, @Nullable String name) {
-        this.templateId = templateId;
+    public CreateApiKeyFromTemplateRequest(String templateName, @Nullable String name) {
+        this.templateName = templateName;
         this.name = name;
     }
 
     public CreateApiKeyFromTemplateRequest(StreamInput in) throws IOException {
         super(in);
-        this.templateId = in.readString();
+        this.templateName = in.readString();
         this.name = in.readOptionalString();
         this.refreshPolicy = WriteRequest.RefreshPolicy.readFrom(in);
     }
@@ -51,12 +47,13 @@ public final class CreateApiKeyFromTemplateRequest extends ActionRequest {
         this.name = name;
     }
 
-    public String getTemplateId() {
-        return templateId;
+    @Override
+    public String getTemplateName() {
+        return templateName;
     }
 
-    public void setTemplateId(String templateId) {
-        this.templateId = templateId;
+    public void setTemplateName(String templateName) {
+        this.templateName = templateName;
     }
 
     public WriteRequest.RefreshPolicy getRefreshPolicy() {
@@ -87,7 +84,7 @@ public final class CreateApiKeyFromTemplateRequest extends ActionRequest {
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        out.writeString(templateId);
+        out.writeString(templateName);
         out.writeOptionalString(name);
         refreshPolicy.writeTo(out);
     }
