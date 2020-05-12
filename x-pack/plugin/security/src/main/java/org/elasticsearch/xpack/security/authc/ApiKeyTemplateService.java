@@ -214,6 +214,7 @@ public class ApiKeyTemplateService {
             request.getRoleDescriptors(), version)) {
             final IndexRequest indexRequest =
                 client.prepareIndex(SECURITY_MAIN_ALIAS)
+                    .setId("api_key_template:" + request.getName())
                     .setSource(builder)
                     .setRefreshPolicy(request.getRefreshPolicy())
                     .request();
