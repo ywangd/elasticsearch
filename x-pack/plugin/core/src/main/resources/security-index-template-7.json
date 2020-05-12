@@ -148,6 +148,14 @@
                       "type": "keyword"
                     }
                   }
+                },
+                "invoke": {
+                  "type": "object",
+                  "properties": {
+                    "templates": {
+                      "type": "keyword"
+                    }
+                  }
                 }
               }
             }

@@ -121,4 +121,9 @@ public final class CreateApiKeyTemplateRequest extends ActionRequest implements 
         out.writeList(roleDescriptors);
         refreshPolicy.writeTo(out);
     }
+
+    @Override
+    public String getAction() {
+        return "manage";
+    }
 }

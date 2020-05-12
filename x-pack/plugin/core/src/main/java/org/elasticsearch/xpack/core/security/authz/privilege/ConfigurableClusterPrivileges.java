@@ -28,11 +28,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * Static utility class for working with {@link ConfigurableClusterPrivilege} instances
@@ -101,15 +104,15 @@ public final class ConfigurableClusterPrivileges {
                     case APPLICATION:
                         expectFieldName(parser, ManageApplicationPrivileges.Fields.MANAGE);
                         privileges.add(ManageApplicationPrivileges.parse(parser));
+                        expectedToken(parser.nextToken(), parser, XContentParser.Token.END_OBJECT);
                         break;
                     case API_KEY_TEMPLATE:
-                        expectFieldName(parser, ManageApiKeyTemplatePrivilege.Fields.MANAGE);
                         privileges.add(ManageApiKeyTemplatePrivilege.parse(parser));
                         break;
                     default:
                         throw new IllegalStateException(String.format(Locale.ROOT, "Unhandled category: %s", category));
                 }
-                expectedToken(parser.nextToken(), parser, XContentParser.Token.END_OBJECT);
+
             }
         }
 
@@ -251,18 +254,25 @@ public final class ConfigurableClusterPrivileges {
     public static class ManageApiKeyTemplatePrivilege implements ConfigurableClusterPrivilege {
         public static final String WRITEABLE_NAME = "manage-api-key-template-privileges";
 
-        private final Set<String> templateNames;
-        private final Predicate<String> templatePredicate;
+        private final Map<String, Set<String>> actionToTemplateNames;
+        private final Map<String, Predicate<String>> actionToTemplatePredicate;
         private final Predicate<TransportRequest> requestPredicate;
 
-        public ManageApiKeyTemplatePrivilege(Set<String> templateNames) {
-            this.templateNames = Collections.unmodifiableSet(templateNames);
-            this.templatePredicate = Automatons.predicate(this.templateNames);
+        public ManageApiKeyTemplatePrivilege(Map<String, Set<String>> actionToTemplateNames) {
+            this.actionToTemplateNames = Collections.unmodifiableMap(actionToTemplateNames);
+            actionToTemplatePredicate = this.actionToTemplateNames.entrySet()
+                .stream()
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, e -> Automatons.predicate(e.getValue())));
             this.requestPredicate = request -> {
                 if (request instanceof ApiKeyTemplateRequest) {
                     final ApiKeyTemplateRequest templateRequest = (ApiKeyTemplateRequest) request;
+                    final Predicate<String> templatePredicate = actionToTemplatePredicate.get(templateRequest.getAction());
+                    final Set<String> templateNames = actionToTemplateNames.get(templateRequest.getAction());
+                    if (templatePredicate == null || templateNames == null) {
+                        return false;
+                    }
                     templateRequest.getTemplateName();
-                    return this.templateNames.contains("*") || templatePredicate.test(templateRequest.getTemplateName());
+                    return templateNames.contains("*") || templatePredicate.test(templateRequest.getTemplateName());
                 }
                 return false;
             };
@@ -273,10 +283,6 @@ public final class ConfigurableClusterPrivileges {
             return Category.API_KEY_TEMPLATE;
         }
 
-        public Collection<String> getTemplateNames() {
-            return Collections.unmodifiableCollection(this.templateNames);
-        }
-
         @Override
         public String getWriteableName() {
             return WRITEABLE_NAME;
@@ -284,37 +290,48 @@ public final class ConfigurableClusterPrivileges {
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
-            out.writeCollection(this.templateNames, StreamOutput::writeString);
+            out.writeMap(this.actionToTemplateNames.entrySet().stream().collect(
+                Collectors.toUnmodifiableMap(Map.Entry::getKey, e -> (Object) e.getValue())));
         }
 
         public static ManageApiKeyTemplatePrivilege createFrom(StreamInput in) throws IOException {
-            final Set<String> templates = in.readSet(StreamInput::readString);
-            return new ManageApiKeyTemplatePrivilege(templates);
+            final Map<String, Set<String>> actionToTemplateNames =
+                in.readMap(StreamInput::readString, (i) -> i.readSet(StreamInput::readString));
+            return new ManageApiKeyTemplatePrivilege(actionToTemplateNames);
         }
 
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            return builder.field(Fields.MANAGE.getPreferredName(),
-                Collections.singletonMap(Fields.TEMPLATES.getPreferredName(), templateNames)
-            );
+            for (Map.Entry<String, Set<String>> entry : actionToTemplateNames.entrySet()) {
+                builder.field(entry.getKey(), Map.of(Fields.TEMPLATES.getPreferredName(), entry.getValue()));
+            }
+            return builder;
         }
 
         public static ManageApiKeyTemplatePrivilege parse(XContentParser parser) throws IOException {
-            expectedToken(parser.currentToken(), parser, XContentParser.Token.FIELD_NAME);
-            expectFieldName(parser, Fields.MANAGE);
-            expectedToken(parser.nextToken(), parser, XContentParser.Token.START_OBJECT);
-            expectedToken(parser.nextToken(), parser, XContentParser.Token.FIELD_NAME);
-            expectFieldName(parser, Fields.TEMPLATES);
-            expectedToken(parser.nextToken(), parser, XContentParser.Token.START_ARRAY);
-            final String[] templates = XContentUtils.readStringArray(parser, false);
-            expectedToken(parser.nextToken(), parser, XContentParser.Token.END_OBJECT);
-            return new ManageApiKeyTemplatePrivilege(new LinkedHashSet<>(Arrays.asList(templates)));
+            final Map<String, Set<String>> actionToTemplates = new HashMap<>();
+            do {
+                expectedToken(parser.currentToken(), parser, XContentParser.Token.FIELD_NAME);
+                expectFieldName(parser, Fields.MANAGE, Fields.INVOKE);
+                final String action = parser.currentName();
+                expectedToken(parser.nextToken(), parser, XContentParser.Token.START_OBJECT);
+                expectedToken(parser.nextToken(), parser, XContentParser.Token.FIELD_NAME);
+                expectFieldName(parser, Fields.TEMPLATES);
+                expectedToken(parser.nextToken(), parser, XContentParser.Token.START_ARRAY);
+                final String[] templates = XContentUtils.readStringArray(parser, false);
+                actionToTemplates.put(action, templates == null ? Set.of() : Set.of(templates));
+                expectedToken(parser.nextToken(), parser, XContentParser.Token.END_OBJECT);
+            } while(parser.nextToken() != XContentParser.Token.END_OBJECT);
+
+            return new ManageApiKeyTemplatePrivilege(actionToTemplates);
         }
 
         @Override
         public String toString() {
-            return "{" + getCategory() + ":" + Fields.MANAGE.getPreferredName() + ":" + Fields.TEMPLATES.getPreferredName() + "="
-                + Strings.collectionToDelimitedString(templateNames, ",") + "}";
+            return "{" + getCategory() + ":"
+                + actionToTemplateNames.entrySet().stream().map(e -> e.getKey() + ":" + Fields.TEMPLATES.getPreferredName() + "="
+                + Strings.collectionToDelimitedString(e.getValue(), ",")).collect(Collectors.joining(":"))
+                + "}";
         }
 
         @Override
@@ -326,12 +343,12 @@ public final class ConfigurableClusterPrivileges {
                 return false;
             }
             final ManageApiKeyTemplatePrivilege that = (ManageApiKeyTemplatePrivilege) o;
-            return this.templateNames.equals(that.templateNames);
+            return this.actionToTemplateNames.equals(that.actionToTemplateNames);
         }
 
         @Override
         public int hashCode() {
-            return templateNames.hashCode();
+            return actionToTemplateNames.hashCode();
         }
 
         @Override
@@ -341,6 +358,7 @@ public final class ConfigurableClusterPrivileges {
 
         private interface Fields {
             ParseField MANAGE = new ParseField("manage");
+            ParseField INVOKE = new ParseField("invoke");
             ParseField TEMPLATES = new ParseField("templates");
         }
     }

@@ -9,4 +9,6 @@ package org.elasticsearch.xpack.core.security.action;
 public interface ApiKeyTemplateRequest {
 
     String getTemplateName();
+
+    String getAction();
 }

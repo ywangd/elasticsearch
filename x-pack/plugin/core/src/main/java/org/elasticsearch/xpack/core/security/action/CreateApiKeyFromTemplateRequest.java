@@ -88,4 +88,9 @@ public final class CreateApiKeyFromTemplateRequest extends ActionRequest impleme
         out.writeOptionalString(name);
         refreshPolicy.writeTo(out);
     }
+
+    @Override
+    public String getAction() {
+        return "invoke";
+    }
 }
