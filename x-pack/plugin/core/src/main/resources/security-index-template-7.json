@@ -200,6 +200,16 @@
             }
           }
         },
+        "api_key_template_invalidated" : {
+          "type" : "boolean"
+        },
+        "key_expiration": {
+          "type": "long"
+        },
+        "last_modified" : {
+          "type" : "date",
+          "format" : "epoch_millis"
+        },
         "rules" : {
           "type" : "object",
           "dynamic" : false
