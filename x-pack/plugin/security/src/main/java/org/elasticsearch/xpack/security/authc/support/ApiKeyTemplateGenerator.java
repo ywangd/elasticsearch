@@ -10,6 +10,8 @@ import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
+import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateRequest;
+import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateResponse;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyTemplateRequest;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyTemplateResponse;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
@@ -55,4 +57,9 @@ public class ApiKeyTemplateGenerator {
 
     }
 
+    public void generateApiKeyFromTemplate(
+        Authentication authentication, CreateApiKeyFromTemplateRequest request, ActionListener<CreateApiKeyFromTemplateResponse> listener) {
+        apiKeyTemplateService.ensureEnabled();
+        apiKeyTemplateService.createApiKeyFromTemplateTemplate(authentication, request, listener);
+    }
 }

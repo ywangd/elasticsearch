@@ -81,6 +81,7 @@ import org.elasticsearch.xpack.core.security.SecurityExtension;
 import org.elasticsearch.xpack.core.security.SecurityField;
 import org.elasticsearch.xpack.core.security.SecuritySettings;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyAction;
+import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateAction;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyTemplateAction;
 import org.elasticsearch.xpack.core.security.action.DelegatePkiAuthenticationAction;
 import org.elasticsearch.xpack.core.security.action.GetApiKeyAction;
@@ -144,6 +145,7 @@ import org.elasticsearch.xpack.core.ssl.action.GetCertificateInfoAction;
 import org.elasticsearch.xpack.core.ssl.action.TransportGetCertificateInfoAction;
 import org.elasticsearch.xpack.core.ssl.rest.RestGetCertificateInfoAction;
 import org.elasticsearch.xpack.security.action.TransportCreateApiKeyAction;
+import org.elasticsearch.xpack.security.action.TransportCreateApiKeyFromTemplateAction;
 import org.elasticsearch.xpack.security.action.TransportCreateApiKeyTemplateAction;
 import org.elasticsearch.xpack.security.action.TransportDelegatePkiAuthenticationAction;
 import org.elasticsearch.xpack.security.action.TransportGetApiKeyAction;
@@ -212,6 +214,7 @@ import org.elasticsearch.xpack.security.rest.SecurityRestFilter;
 import org.elasticsearch.xpack.security.rest.action.RestAuthenticateAction;
 import org.elasticsearch.xpack.security.rest.action.RestDelegatePkiAuthenticationAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestCreateApiKeyAction;
+import org.elasticsearch.xpack.security.rest.action.apikey.RestCreateApiKeyFromTemplateAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestCreateApiKeyTemplateAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestGetApiKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestGrantApiKeyAction;
@@ -767,6 +770,7 @@ public class Security extends Plugin implements SystemIndexPlugin, IngestPlugin,
                 new ActionHandler<>(DeletePrivilegesAction.INSTANCE, TransportDeletePrivilegesAction.class),
                 new ActionHandler<>(CreateApiKeyAction.INSTANCE, TransportCreateApiKeyAction.class),
                 new ActionHandler<>(CreateApiKeyTemplateAction.INSTANCE, TransportCreateApiKeyTemplateAction.class),
+                new ActionHandler<>(CreateApiKeyFromTemplateAction.INSTANCE, TransportCreateApiKeyFromTemplateAction.class),
                 new ActionHandler<>(GrantApiKeyAction.INSTANCE, TransportGrantApiKeyAction.class),
                 new ActionHandler<>(InvalidateApiKeyAction.INSTANCE, TransportInvalidateApiKeyAction.class),
                 new ActionHandler<>(GetApiKeyAction.INSTANCE, TransportGetApiKeyAction.class),
@@ -824,6 +828,7 @@ public class Security extends Plugin implements SystemIndexPlugin, IngestPlugin,
                 new RestDeletePrivilegesAction(settings, getLicenseState()),
                 new RestCreateApiKeyAction(settings, getLicenseState()),
                 new RestCreateApiKeyTemplateAction(settings, getLicenseState()),
+                new RestCreateApiKeyFromTemplateAction(settings, getLicenseState()),
                 new RestGrantApiKeyAction(settings, getLicenseState()),
                 new RestInvalidateApiKeyAction(settings, getLicenseState()),
                 new RestGetApiKeyAction(settings, getLicenseState()),

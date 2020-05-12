@@ -18,6 +18,7 @@ import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.get.GetAction;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.index.IndexAction;
@@ -61,6 +62,9 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.security.ScrollHelper;
 import org.elasticsearch.xpack.core.security.action.ApiKey;
+import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateRequest;
+import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateResponse;
+import org.elasticsearch.xpack.core.security.action.CreateApiKeyRequest;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyResponse;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyTemplateRequest;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyTemplateResponse;
@@ -87,6 +91,7 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -204,7 +209,7 @@ public class ApiKeyTemplateService {
         final Version version = clusterService.state().nodes().getMinNodeVersion();
 
 
-        try (XContentBuilder builder = newDocument(
+        try (XContentBuilder builder = newTemplateDocument(
             request.getName(), authentication, roleDescriptorSet, created, expiration, request.getKeyExpiration(),
             request.getRoleDescriptors(), version)) {
             final IndexRequest indexRequest =
@@ -227,7 +232,7 @@ public class ApiKeyTemplateService {
     /**
      * package protected for testing
      */
-    XContentBuilder newDocument(String name, Authentication authentication, Set<RoleDescriptor> userRoles,
+    XContentBuilder newTemplateDocument(String name, Authentication authentication, Set<RoleDescriptor> userRoles,
         Instant created, Instant expiration, TimeValue keyExpiration,
         List<RoleDescriptor> templateRoles, Version version) throws IOException {
         XContentBuilder builder = XContentFactory.jsonBuilder();
@@ -260,6 +265,134 @@ public class ApiKeyTemplateService {
         builder.field("name", name)
             .field("version", version.id)
             .field("last_modified", creation_time) // TODO: more comprehensive hash?
+            .startObject("creator")
+            .field("principal", authentication.getUser().principal())
+            .field("metadata", authentication.getUser().metadata())
+            .field("realm", authentication.getSourceRealm().getName())
+            .field("realm_type", authentication.getSourceRealm().getType())
+            .endObject()
+            .endObject();
+
+        return builder;
+    }
+
+    public void createApiKeyFromTemplateTemplate(Authentication authentication, CreateApiKeyFromTemplateRequest request,
+        ActionListener<CreateApiKeyFromTemplateResponse> listener) {
+        final GetRequest getRequest = client.prepareGet(SECURITY_MAIN_ALIAS, request.getTemplateId())
+            .setFetchSource(true)
+            .request();
+        executeAsyncWithOrigin(client, SECURITY_ORIGIN, GetAction.INSTANCE, getRequest, ActionListener.wrap(
+            response -> {
+                createApiKeyAndIndexIt(authentication, request, response.getSource(), listener);
+            },
+            listener::onFailure
+        ));
+
+    }
+
+    private Set<RoleDescriptor> buildRoleDescriptorSet(Map<String, Object> mapOfRoleDescriptors) throws IOException {
+        if (mapOfRoleDescriptors == null) {
+            return null;
+        }
+        final HashSet<RoleDescriptor> roleDescriptors = new HashSet<>();
+        for (Map.Entry<String, Object> entry : mapOfRoleDescriptors.entrySet()) {
+            final RoleDescriptor roleDescriptor = RoleDescriptor.parse(
+                entry.getKey(),
+                BytesReference.bytes(XContentFactory.jsonBuilder().map((Map<String, Object>) entry.getValue())),
+                false,
+                XContentType.JSON);
+            roleDescriptors.add(roleDescriptor);
+        }
+        return roleDescriptors;
+    }
+
+    private void createApiKeyAndIndexIt(Authentication authentication, CreateApiKeyFromTemplateRequest request,
+        Map<String, Object> source, ActionListener<CreateApiKeyFromTemplateResponse> listener) throws IOException {
+
+        final Set<RoleDescriptor> roleDescriptorSet =
+            buildRoleDescriptorSet((Map<String, Object>) source.get("role_descriptors"));
+        final Set<RoleDescriptor> limitedByRoleDescriptorSet =
+            buildRoleDescriptorSet((Map<String, Object>) source.get("limited_by_role_descriptors"));
+
+        final long templateLastModified = (long)source.get("last_modified");
+
+        final Instant creationTime = clock.instant();
+        final Object keyExpiration = source.get("key_expiration");
+        final Instant expirationTime = keyExpiration == null ? null : creationTime.plusMillis((long) keyExpiration);
+
+
+        final Instant created = clock.instant();
+        final SecureString apiKey = UUIDs.randomBase64UUIDSecureString();
+        final Version version = clusterService.state().nodes().getMinNodeVersion();
+
+        try (XContentBuilder builder = newDocument(apiKey, request.getName(), authentication,
+            roleDescriptorSet, limitedByRoleDescriptorSet, request.getTemplateId(), templateLastModified,
+            created, expirationTime, version)) {
+            final IndexRequest indexRequest =
+                client.prepareIndex(SECURITY_MAIN_ALIAS)
+                    .setSource(builder)
+                    .setRefreshPolicy(request.getRefreshPolicy())
+                    .request();
+            securityIndex.prepareIndexIfNeededThenExecute(listener::onFailure, () ->
+                executeAsyncWithOrigin(client, SECURITY_ORIGIN, IndexAction.INSTANCE, indexRequest,
+                    ActionListener.wrap(
+                        indexResponse -> listener.onResponse(
+                            new CreateApiKeyFromTemplateResponse(request.getName(), indexResponse.getId(), apiKey, expirationTime)),
+                        listener::onFailure)));
+        } catch (IOException e) {
+            listener.onFailure(e);
+        }
+    }
+
+    /**
+     * package protected for testing
+     */
+    XContentBuilder newDocument(SecureString apiKey, String name, Authentication authentication,
+        Set<RoleDescriptor> roleDescriptors, Set<RoleDescriptor> limitedByRoleDescriptorSet,
+        String templateId, long templateLastModified,
+        Instant created, Instant expiration, Version version) throws IOException {
+
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.startObject()
+            .field("doc_type", "api_key")
+            .field("creation_time", created.toEpochMilli())
+            .field("expiration_time", expiration == null ? null : expiration.toEpochMilli())
+            .field("api_key_invalidated", false);
+
+        byte[] utf8Bytes = null;
+        final char[] keyHash = hasher.hash(apiKey);
+        try {
+            utf8Bytes = CharArrays.toUtf8Bytes(keyHash);
+            builder.field("api_key_hash").utf8Value(utf8Bytes, 0, utf8Bytes.length);
+        } finally {
+            if (utf8Bytes != null) {
+                Arrays.fill(utf8Bytes, (byte) 0);
+            }
+            Arrays.fill(keyHash, (char) 0);
+        }
+
+        // Save role_descriptors
+        builder.startObject("role_descriptors");
+        if (roleDescriptors != null && roleDescriptors.isEmpty() == false) {
+            for (RoleDescriptor descriptor : roleDescriptors) {
+                builder.field(descriptor.getName(),
+                    (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
+            }
+        }
+        builder.endObject();
+
+        // Save limited_by_role_descriptors
+        builder.startObject("limited_by_role_descriptors");
+        for (RoleDescriptor descriptor : limitedByRoleDescriptorSet) {
+            builder.field(descriptor.getName(),
+                (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
+        }
+        builder.endObject();
+
+        builder.field("name", name)
+            .field("version", version.id)
+            .field("template", templateId)
+            .field("template_last_modified", templateLastModified)
             .startObject("creator")
             .field("principal", authentication.getUser().principal())
             .field("metadata", authentication.getUser().metadata())
@@ -351,6 +484,7 @@ public class ApiKeyTemplateService {
             listener.onResponse(new ApiKeyRoleDescriptors(apiKeyId, roleDescriptorList, authnRoleDescriptorsList));
         }
     }
+
 
     public static class ApiKeyRoleDescriptors {
 

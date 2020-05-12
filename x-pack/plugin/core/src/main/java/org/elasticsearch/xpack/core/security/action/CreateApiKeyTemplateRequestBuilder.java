@@ -32,7 +32,7 @@ public final class CreateApiKeyTemplateRequestBuilder extends ActionRequestBuild
 
     @SuppressWarnings("unchecked")
     static final ConstructingObjectParser<CreateApiKeyTemplateRequest, Void> PARSER = new ConstructingObjectParser<>(
-            "api_key_request", false, (args, v) -> {
+            "api_key_template_request", false, (args, v) -> {
                 return new CreateApiKeyTemplateRequest((String) args[0], (List<RoleDescriptor>) args[1],
                         TimeValue.parseTimeValue((String) args[2], null, "expiration"),
                         TimeValue.parseTimeValue((String) args[2], null, "keExpiration"));
