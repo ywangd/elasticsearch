@@ -35,8 +35,10 @@ public final class ApiKey implements ToXContentObject, Writeable {
     private final boolean invalidated;
     private final String username;
     private final String realm;
+    private final String template;
 
-    public ApiKey(String name, String id, Instant creation, Instant expiration, boolean invalidated, String username, String realm) {
+    public ApiKey(
+        String name, String id, Instant creation, Instant expiration, boolean invalidated, String username, String realm, String template) {
         this.name = name;
         this.id = id;
         // As we do not yet support the nanosecond precision when we serialize to JSON,
@@ -47,6 +49,7 @@ public final class ApiKey implements ToXContentObject, Writeable {
         this.invalidated = invalidated;
         this.username = username;
         this.realm = realm;
+        this.template = template;
     }
 
     public ApiKey(StreamInput in) throws IOException {
@@ -61,6 +64,7 @@ public final class ApiKey implements ToXContentObject, Writeable {
         this.invalidated = in.readBoolean();
         this.username = in.readString();
         this.realm = in.readString();
+        this.template = in.readString();
     }
 
     public String getId() {
@@ -102,7 +106,8 @@ public final class ApiKey implements ToXContentObject, Writeable {
         }
         builder.field("invalidated", invalidated)
         .field("username", username)
-        .field("realm", realm);
+        .field("realm", realm)
+        .field("template", template);
         return builder.endObject();
     }
 
@@ -119,11 +124,12 @@ public final class ApiKey implements ToXContentObject, Writeable {
         out.writeBoolean(invalidated);
         out.writeString(username);
         out.writeString(realm);
+        out.writeString(template);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, id, creation, expiration, invalidated, username, realm);
+        return Objects.hash(name, id, creation, expiration, invalidated, username, realm, template);
     }
 
     @Override
@@ -144,12 +150,14 @@ public final class ApiKey implements ToXContentObject, Writeable {
                 && Objects.equals(expiration, other.expiration)
                 && Objects.equals(invalidated, other.invalidated)
                 && Objects.equals(username, other.username)
-                && Objects.equals(realm, other.realm);
+                && Objects.equals(realm, other.realm)
+                && Objects.equals(template, other.template);
     }
 
     static final ConstructingObjectParser<ApiKey, Void> PARSER = new ConstructingObjectParser<>("api_key", args -> {
         return new ApiKey((String) args[0], (String) args[1], Instant.ofEpochMilli((Long) args[2]),
-                (args[3] == null) ? null : Instant.ofEpochMilli((Long) args[3]), (Boolean) args[4], (String) args[5], (String) args[6]);
+                (args[3] == null) ? null : Instant.ofEpochMilli((Long) args[3]), (Boolean) args[4], (String) args[5], (String) args[6],
+            (String) args[7]);
     });
     static {
         PARSER.declareString(constructorArg(), new ParseField("name"));
@@ -159,6 +167,7 @@ public final class ApiKey implements ToXContentObject, Writeable {
         PARSER.declareBoolean(constructorArg(), new ParseField("invalidated"));
         PARSER.declareString(constructorArg(), new ParseField("username"));
         PARSER.declareString(constructorArg(), new ParseField("realm"));
+        PARSER.declareString(constructorArg(), new ParseField("template"));
     }
 
     public static ApiKey fromXContent(XContentParser parser) throws IOException {

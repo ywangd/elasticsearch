@@ -115,6 +115,7 @@ public class ApiKeyService {
     public static final String API_KEY_REALM_TYPE = "_es_api_key";
     public static final String API_KEY_CREATOR_REALM_NAME = "_security_api_key_creator_realm_name";
     public static final String API_KEY_CREATOR_REALM_TYPE = "_security_api_key_creator_realm_type";
+    public static final String API_KEY_TEMPLATE_NAME_KEY = "_es_api_key_template";
     static final String API_KEY_ROLE_DESCRIPTORS_KEY = "_security_api_key_role_descriptors";
     static final String API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY = "_security_api_key_limited_by_role_descriptors";
 
@@ -511,6 +512,7 @@ public class ApiKeyService {
             authResultMetadata.put(API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY, limitedByRoleDescriptors);
             authResultMetadata.put(API_KEY_ID_KEY, credentials.getId());
             authResultMetadata.put(API_KEY_NAME_KEY, source.get("name"));
+            authResultMetadata.put(API_KEY_TEMPLATE_NAME_KEY, source.get("template"));
             listener.onResponse(AuthenticationResult.success(apiKeyUser, authResultMetadata));
         } else {
             listener.onResponse(AuthenticationResult.unsuccessful("api key is expired", null));
@@ -712,7 +714,8 @@ public class ApiKeyService {
                                 String username = (String) ((Map<String, Object>) source.get("creator")).get("principal");
                                 String realm = (String) ((Map<String, Object>) source.get("creator")).get("realm");
                                 return new ApiKey(name, id, Instant.ofEpochMilli(creation),
-                                        (expiration != null) ? Instant.ofEpochMilli(expiration) : null, invalidated, username, realm);
+                                        (expiration != null) ? Instant.ofEpochMilli(expiration) : null, invalidated, username, realm,
+                                    (String) source.get("template"));
                             }));
         }
     }

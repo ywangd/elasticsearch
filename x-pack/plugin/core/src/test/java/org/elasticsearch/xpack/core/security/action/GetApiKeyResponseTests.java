@@ -63,7 +63,7 @@ public class GetApiKeyResponseTests extends ESTestCase {
 
     private ApiKey createApiKeyInfo(String name, String id, Instant creation, Instant expiration, boolean invalidated, String username,
                                         String realm) {
-        return new ApiKey(name, id, creation, expiration, invalidated, username, realm);
+        return new ApiKey(name, id, creation, expiration, invalidated, username, realm, );
     }
 }
 

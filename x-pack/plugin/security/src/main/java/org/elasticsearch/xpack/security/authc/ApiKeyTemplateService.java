@@ -831,7 +831,8 @@ public class ApiKeyTemplateService {
                                 String username = (String) ((Map<String, Object>) source.get("creator")).get("principal");
                                 String realm = (String) ((Map<String, Object>) source.get("creator")).get("realm");
                                 return new ApiKey(name, id, Instant.ofEpochMilli(creation),
-                                        (expiration != null) ? Instant.ofEpochMilli(expiration) : null, invalidated, username, realm);
+                                        (expiration != null) ? Instant.ofEpochMilli(expiration) : null, invalidated, username, realm,
+                                    (String) source.get("template"));
                             }));
         }
     }
