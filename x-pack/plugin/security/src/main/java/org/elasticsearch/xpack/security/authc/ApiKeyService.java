@@ -116,6 +116,7 @@ public class ApiKeyService {
     public static final String API_KEY_CREATOR_REALM_NAME = "_security_api_key_creator_realm_name";
     public static final String API_KEY_CREATOR_REALM_TYPE = "_security_api_key_creator_realm_type";
     public static final String API_KEY_TEMPLATE_NAME_KEY = "_es_api_key_template";
+    public static final String API_KEY_TEMPLATE_LAST_MODIFIED_KEY = "_es_api_key_template_last_modified";
     static final String API_KEY_ROLE_DESCRIPTORS_KEY = "_security_api_key_role_descriptors";
     static final String API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY = "_security_api_key_limited_by_role_descriptors";
 
@@ -513,6 +514,7 @@ public class ApiKeyService {
             authResultMetadata.put(API_KEY_ID_KEY, credentials.getId());
             authResultMetadata.put(API_KEY_NAME_KEY, source.get("name"));
             authResultMetadata.put(API_KEY_TEMPLATE_NAME_KEY, source.get("template"));
+            authResultMetadata.put(API_KEY_TEMPLATE_LAST_MODIFIED_KEY, source.getOrDefault("template_last_modified", 0));
             listener.onResponse(AuthenticationResult.success(apiKeyUser, authResultMetadata));
         } else {
             listener.onResponse(AuthenticationResult.unsuccessful("api key is expired", null));

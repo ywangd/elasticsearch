@@ -6,7 +6,6 @@
 
 package org.elasticsearch.xpack.core.security.action;
 
-import org.elasticsearch.Version;
 import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -26,21 +25,18 @@ import static org.elasticsearch.common.xcontent.ConstructingObjectParser.optiona
 /**
  * API key information
  */
-public final class ApiKey implements ToXContentObject, Writeable {
+public final class ApiKeyTemplate implements ToXContentObject, Writeable {
 
     private final String name;
-    private final String id;
     private final Instant creation;
     private final Instant expiration;
     private final boolean invalidated;
     private final String username;
     private final String realm;
-    private final String template;
 
-    public ApiKey(
-        String name, String id, Instant creation, Instant expiration, boolean invalidated, String username, String realm, String template) {
+    public ApiKeyTemplate(
+        String name, Instant creation, Instant expiration, boolean invalidated, String username, String realm) {
         this.name = name;
-        this.id = id;
         // As we do not yet support the nanosecond precision when we serialize to JSON,
         // here creating the 'Instant' of milliseconds precision.
         // This Instant can then be used for date comparison.
@@ -49,26 +45,15 @@ public final class ApiKey implements ToXContentObject, Writeable {
         this.invalidated = invalidated;
         this.username = username;
         this.realm = realm;
-        this.template = template;
     }
 
-    public ApiKey(StreamInput in) throws IOException {
-        if (in.getVersion().onOrAfter(Version.V_7_5_0)) {
-            this.name = in.readOptionalString();
-        } else {
-            this.name = in.readString();
-        }
-        this.id = in.readString();
+    public ApiKeyTemplate(StreamInput in) throws IOException {
+        this.name = in.readString();
         this.creation = in.readInstant();
         this.expiration = in.readOptionalInstant();
         this.invalidated = in.readBoolean();
         this.username = in.readString();
         this.realm = in.readString();
-        this.template = in.readString();
-    }
-
-    public String getId() {
-        return id;
     }
 
     public String getName() {
@@ -95,14 +80,9 @@ public final class ApiKey implements ToXContentObject, Writeable {
         return realm;
     }
 
-    public String getTemplate() {
-        return template;
-    }
-
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject()
-        .field("id", id)
         .field("name", name)
         .field("creation", creation.toEpochMilli());
         if (expiration != null) {
@@ -110,30 +90,23 @@ public final class ApiKey implements ToXContentObject, Writeable {
         }
         builder.field("invalidated", invalidated)
         .field("username", username)
-        .field("realm", realm)
-        .field("template", template);
+        .field("realm", realm);
         return builder.endObject();
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        if (out.getVersion().onOrAfter(Version.V_7_5_0)) {
-            out.writeOptionalString(name);
-        } else {
-            out.writeString(name);
-        }
-        out.writeString(id);
+        out.writeString(name);
         out.writeInstant(creation);
         out.writeOptionalInstant(expiration);
         out.writeBoolean(invalidated);
         out.writeString(username);
         out.writeString(realm);
-        out.writeString(template);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, id, creation, expiration, invalidated, username, realm, template);
+        return Objects.hash(name, creation, expiration, invalidated, username, realm);
     }
 
     @Override
@@ -147,41 +120,36 @@ public final class ApiKey implements ToXContentObject, Writeable {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        ApiKey other = (ApiKey) obj;
+        ApiKeyTemplate other = (ApiKeyTemplate) obj;
         return Objects.equals(name, other.name)
-                && Objects.equals(id, other.id)
                 && Objects.equals(creation, other.creation)
                 && Objects.equals(expiration, other.expiration)
                 && Objects.equals(invalidated, other.invalidated)
                 && Objects.equals(username, other.username)
-                && Objects.equals(realm, other.realm)
-                && Objects.equals(template, other.template);
+                && Objects.equals(realm, other.realm);
     }
 
-    static final ConstructingObjectParser<ApiKey, Void> PARSER = new ConstructingObjectParser<>("api_key", args -> {
-        return new ApiKey((String) args[0], (String) args[1], Instant.ofEpochMilli((Long) args[2]),
-                (args[3] == null) ? null : Instant.ofEpochMilli((Long) args[3]), (Boolean) args[4], (String) args[5], (String) args[6],
-            (String) args[7]);
+    static final ConstructingObjectParser<ApiKeyTemplate, Void> PARSER = new ConstructingObjectParser<>("api_key", args -> {
+        return new ApiKeyTemplate((String) args[0], Instant.ofEpochMilli((Long) args[1]),
+                (args[2] == null) ? null : Instant.ofEpochMilli((Long) args[2]), (Boolean) args[3], (String) args[4], (String) args[5]);
     });
     static {
         PARSER.declareString(constructorArg(), new ParseField("name"));
-        PARSER.declareString(constructorArg(), new ParseField("id"));
         PARSER.declareLong(constructorArg(), new ParseField("creation"));
         PARSER.declareLong(optionalConstructorArg(), new ParseField("expiration"));
         PARSER.declareBoolean(constructorArg(), new ParseField("invalidated"));
         PARSER.declareString(constructorArg(), new ParseField("username"));
         PARSER.declareString(constructorArg(), new ParseField("realm"));
-        PARSER.declareString(constructorArg(), new ParseField("template"));
     }
 
-    public static ApiKey fromXContent(XContentParser parser) throws IOException {
+    public static ApiKeyTemplate fromXContent(XContentParser parser) throws IOException {
         return PARSER.parse(parser, null);
     }
 
     @Override
     public String toString() {
-        return "ApiKey [name=" + name + ", id=" + id + ", creation=" + creation + ", expiration=" + expiration + ", invalidated="
-                + invalidated + ", username=" + username + ", realm=" + realm + ", template=" + template + "]";
+        return "ApiKeyTemplate [name=" + name + ", creation=" + creation + ", expiration=" + expiration + ", invalidated="
+                + invalidated + ", username=" + username + ", realm=" + realm + "]";
     }
 
 }
