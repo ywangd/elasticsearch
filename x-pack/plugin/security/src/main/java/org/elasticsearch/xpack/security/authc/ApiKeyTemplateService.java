@@ -257,13 +257,13 @@ public class ApiKeyTemplateService {
         }
         builder.endObject();
 
-        // Save limited_by_role_descriptors
-        builder.startObject("limited_by_role_descriptors");
-        for (RoleDescriptor descriptor : userRoles) {
-            builder.field(descriptor.getName(),
-                (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
-        }
-        builder.endObject();
+//        // Save limited_by_role_descriptors
+//        builder.startObject("limited_by_role_descriptors");
+//        for (RoleDescriptor descriptor : userRoles) {
+//            builder.field(descriptor.getName(),
+//                (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
+//        }
+//        builder.endObject();
 
         builder.field("name", name)
             .field("version", version.id)
@@ -390,12 +390,14 @@ public class ApiKeyTemplateService {
         builder.endObject();
 
         // Save limited_by_role_descriptors
-        builder.startObject("limited_by_role_descriptors");
-        for (RoleDescriptor descriptor : limitedByRoleDescriptorSet) {
-            builder.field(descriptor.getName(),
-                (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
+        if (limitedByRoleDescriptorSet != null && limitedByRoleDescriptorSet.isEmpty() == false) {
+            builder.startObject("limited_by_role_descriptors");
+            for (RoleDescriptor descriptor : limitedByRoleDescriptorSet) {
+                builder.field(descriptor.getName(),
+                    (contentBuilder, params) -> descriptor.toXContent(contentBuilder, params, true));
+            }
+            builder.endObject();
         }
-        builder.endObject();
 
         builder.field("name", name)
             .field("version", version.id)
