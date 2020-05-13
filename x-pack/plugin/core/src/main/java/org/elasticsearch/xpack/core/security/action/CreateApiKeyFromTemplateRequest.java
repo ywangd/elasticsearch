@@ -23,19 +23,22 @@ public final class CreateApiKeyFromTemplateRequest extends ActionRequest impleme
 
     private String templateName;
     private String name;
+    private boolean syncable;
     private WriteRequest.RefreshPolicy refreshPolicy = DEFAULT_REFRESH_POLICY;
 
     public CreateApiKeyFromTemplateRequest() {}
 
-    public CreateApiKeyFromTemplateRequest(String templateName, @Nullable String name) {
+    public CreateApiKeyFromTemplateRequest(String templateName, @Nullable String name, boolean syncable) {
         this.templateName = templateName;
         this.name = name;
+        this.syncable = syncable;
     }
 
     public CreateApiKeyFromTemplateRequest(StreamInput in) throws IOException {
         super(in);
         this.templateName = in.readString();
         this.name = in.readOptionalString();
+        this.syncable = in.readBoolean();
         this.refreshPolicy = WriteRequest.RefreshPolicy.readFrom(in);
     }
 
@@ -54,6 +57,14 @@ public final class CreateApiKeyFromTemplateRequest extends ActionRequest impleme
 
     public void setTemplateName(String templateName) {
         this.templateName = templateName;
+    }
+
+    public boolean isSyncable() {
+        return syncable;
+    }
+
+    public void setSyncable(boolean syncable) {
+        this.syncable = syncable;
     }
 
     public WriteRequest.RefreshPolicy getRefreshPolicy() {
@@ -86,11 +97,12 @@ public final class CreateApiKeyFromTemplateRequest extends ActionRequest impleme
         super.writeTo(out);
         out.writeString(templateName);
         out.writeOptionalString(name);
+        out.writeBoolean(syncable);
         refreshPolicy.writeTo(out);
     }
 
     @Override
     public String getAction() {
-        return "invoke";
+        return syncable ? "invoke_sync" : "invoke";
     }
 }

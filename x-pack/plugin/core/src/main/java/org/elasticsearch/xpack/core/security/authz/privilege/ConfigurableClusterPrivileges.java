@@ -312,7 +312,7 @@ public final class ConfigurableClusterPrivileges {
             final Map<String, Set<String>> actionToTemplates = new HashMap<>();
             do {
                 expectedToken(parser.currentToken(), parser, XContentParser.Token.FIELD_NAME);
-                expectFieldName(parser, Fields.MANAGE, Fields.INVOKE);
+                expectFieldName(parser, Fields.MANAGE, Fields.INVOKE, Fields.INVOKE_SYNC);
                 final String action = parser.currentName();
                 expectedToken(parser.nextToken(), parser, XContentParser.Token.START_OBJECT);
                 expectedToken(parser.nextToken(), parser, XContentParser.Token.FIELD_NAME);
@@ -359,6 +359,7 @@ public final class ConfigurableClusterPrivileges {
         private interface Fields {
             ParseField MANAGE = new ParseField("manage");
             ParseField INVOKE = new ParseField("invoke");
+            ParseField INVOKE_SYNC = new ParseField("invoke_sync");
             ParseField TEMPLATES = new ParseField("templates");
         }
     }

@@ -156,6 +156,14 @@
                       "type": "keyword"
                     }
                   }
+                },
+                "invoke_sync": {
+                  "type": "object",
+                  "properties": {
+                    "templates": {
+                      "type": "keyword"
+                    }
+                  }
                 }
               }
             }

@@ -61,7 +61,6 @@ import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.security.ScrollHelper;
-import org.elasticsearch.xpack.core.security.action.ApiKey;
 import org.elasticsearch.xpack.core.security.action.ApiKeyTemplate;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateRequest;
 import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateResponse;
@@ -70,6 +69,8 @@ import org.elasticsearch.xpack.core.security.action.CreateApiKeyTemplateResponse
 import org.elasticsearch.xpack.core.security.action.GetApiKeyResponse;
 import org.elasticsearch.xpack.core.security.action.GetApiKeyTemplateResponse;
 import org.elasticsearch.xpack.core.security.action.InvalidateApiKeyResponse;
+import org.elasticsearch.xpack.core.security.action.SyncApiKeyRequest;
+import org.elasticsearch.xpack.core.security.action.SyncApiKeyResponse;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationResult;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
@@ -278,7 +279,7 @@ public class ApiKeyTemplateService {
         return builder;
     }
 
-    public void createApiKeyFromTemplateTemplate(Authentication authentication, CreateApiKeyFromTemplateRequest request,
+    public void createApiKeyFromTemplate(Authentication authentication, CreateApiKeyFromTemplateRequest request,
         ActionListener<CreateApiKeyFromTemplateResponse> listener) {
         final GetRequest getRequest = client.prepareGet(SECURITY_MAIN_ALIAS, "api_key_template:" + request.getTemplateName())
             .setFetchSource(true)
@@ -289,14 +290,19 @@ public class ApiKeyTemplateService {
             },
             listener::onFailure
         ));
-
     }
 
-    private Set<RoleDescriptor> buildRoleDescriptorSet(Map<String, Object> mapOfRoleDescriptors) throws IOException {
-        if (mapOfRoleDescriptors == null) {
-            return null;
-        }
+    private Set<RoleDescriptor> buildRoleDescriptorSet(Map<String, Object> mapOfRoleDescriptors, boolean syncable) throws IOException {
         final HashSet<RoleDescriptor> roleDescriptors = new HashSet<>();
+        if (syncable) {
+            roleDescriptors.add(new RoleDescriptor(
+                "syncable",
+                new String[] { "cluster:admin/xpack/security/api_key/sync" }, null, null));
+        }
+
+        if (mapOfRoleDescriptors == null) {
+            return roleDescriptors.isEmpty() ? null : roleDescriptors;
+        }
         for (Map.Entry<String, Object> entry : mapOfRoleDescriptors.entrySet()) {
             final RoleDescriptor roleDescriptor = RoleDescriptor.parse(
                 entry.getKey(),
@@ -312,9 +318,9 @@ public class ApiKeyTemplateService {
         Map<String, Object> source, ActionListener<CreateApiKeyFromTemplateResponse> listener) throws IOException {
 
         final Set<RoleDescriptor> roleDescriptorSet =
-            buildRoleDescriptorSet((Map<String, Object>) source.get("role_descriptors"));
+            buildRoleDescriptorSet((Map<String, Object>) source.get("role_descriptors"), request.isSyncable());
         final Set<RoleDescriptor> limitedByRoleDescriptorSet =
-            buildRoleDescriptorSet((Map<String, Object>) source.get("limited_by_role_descriptors"));
+            buildRoleDescriptorSet((Map<String, Object>) source.get("limited_by_role_descriptors"), request.isSyncable());
 
         final long templateLastModified = (long)source.get("last_modified");
 
@@ -327,7 +333,7 @@ public class ApiKeyTemplateService {
         final SecureString apiKey = UUIDs.randomBase64UUIDSecureString();
         final Version version = clusterService.state().nodes().getMinNodeVersion();
 
-        try (XContentBuilder builder = newDocument(apiKey, request.getName(), authentication,
+        try (XContentBuilder builder = newKeyDocument(apiKey, request.getName(), authentication,
             roleDescriptorSet, limitedByRoleDescriptorSet, request.getTemplateName(), templateLastModified,
             created, expirationTime, version)) {
             final IndexRequest indexRequest =
@@ -349,7 +355,7 @@ public class ApiKeyTemplateService {
     /**
      * package protected for testing
      */
-    XContentBuilder newDocument(SecureString apiKey, String name, Authentication authentication,
+    XContentBuilder newKeyDocument(SecureString apiKey, String name, Authentication authentication,
         Set<RoleDescriptor> roleDescriptors, Set<RoleDescriptor> limitedByRoleDescriptorSet,
         String templateId, long templateLastModified,
         Instant created, Instant expiration, Version version) throws IOException {
@@ -404,6 +410,50 @@ public class ApiKeyTemplateService {
             .endObject();
 
         return builder;
+    }
+
+    public void syncApiKey(Authentication authentication, SyncApiKeyRequest request, ActionListener<SyncApiKeyResponse> listener) {
+        final String templateName = (String) authentication.getMetadata().get(ApiKeyService.API_KEY_TEMPLATE_NAME_KEY);
+        final String apiKeyName = (String) authentication.getMetadata().get(ApiKeyService.API_KEY_NAME_KEY);
+        final String apiKeyId = (String) authentication.getMetadata().get(ApiKeyService.API_KEY_ID_KEY);
+        final long templateLastModified = (long) authentication.getMetadata()
+            .getOrDefault(ApiKeyService.API_KEY_TEMPLATE_LAST_MODIFIED_KEY, 0);
+        final GetRequest getRequest = client.prepareGet(SECURITY_MAIN_ALIAS, "api_key_template:" + templateName)
+            .setFetchSource(true)
+            .request();
+        executeAsyncWithOrigin(client, SECURITY_ORIGIN, GetAction.INSTANCE, getRequest, ActionListener.wrap(
+            response -> {
+                final Map<String, Object> source = response.getSource();
+                if ((long) source.get("last_modified") == templateLastModified) {
+                    logger.info("API Key {} is already up to date with the template: {}", apiKeyName, templateName);
+                    listener.onResponse(SyncApiKeyResponse.EMPTY);
+                } else {
+                    // TODO: we may not wanna extend the expiration time?
+                    createApiKeyAndIndexIt(authentication,
+                        new CreateApiKeyFromTemplateRequest(templateName,apiKeyName, true), source,
+                        ActionListener.wrap(
+                            indexResponse -> {
+                                invalidateAllApiKeys(List.of(apiKeyId), ActionListener.wrap(
+                                    invalidateResponse -> {
+                                        if (invalidateResponse.getInvalidatedApiKeys().contains(apiKeyId)) {
+                                            listener.onResponse(new SyncApiKeyResponse(
+                                                indexResponse.getName(), indexResponse.getId(),
+                                                indexResponse.getKey(), indexResponse.getExpiration()));
+                                        } else {
+                                            logger.warn("Cannot invalidate old key: [{}], [{}]", apiKeyId, apiKeyName);
+                                            // TODO: what about the newly created key?
+                                            listener.onFailure(
+                                                new IllegalStateException("cannot invalidate old key"));
+                                        }
+                                    },
+                                    listener::onFailure
+                                ));
+                            },
+                            listener::onFailure));
+                }
+            },
+            listener::onFailure
+        ));
     }
 
     /**

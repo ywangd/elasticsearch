@@ -41,6 +41,11 @@ public final class CreateApiKeyFromTemplateRequestBuilder extends ActionRequestB
         return this;
     }
 
+    public CreateApiKeyFromTemplateRequestBuilder setSyncable(boolean syncable) {
+        request.setSyncable(syncable);
+        return this;
+    }
+
     public CreateApiKeyFromTemplateRequestBuilder setRefreshPolicy(WriteRequest.RefreshPolicy refreshPolicy) {
         request.setRefreshPolicy(refreshPolicy);
         return this;

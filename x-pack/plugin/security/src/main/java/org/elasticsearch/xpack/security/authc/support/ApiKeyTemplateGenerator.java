@@ -60,6 +60,6 @@ public class ApiKeyTemplateGenerator {
     public void generateApiKeyFromTemplate(
         Authentication authentication, CreateApiKeyFromTemplateRequest request, ActionListener<CreateApiKeyFromTemplateResponse> listener) {
         apiKeyTemplateService.ensureEnabled();
-        apiKeyTemplateService.createApiKeyFromTemplateTemplate(authentication, request, listener);
+        apiKeyTemplateService.createApiKeyFromTemplate(authentication, request, listener);
     }
 }

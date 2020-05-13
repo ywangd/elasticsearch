@@ -12,8 +12,8 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.license.XPackLicenseState;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.action.RestToXContentListener;
-import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateRequest;
-import org.elasticsearch.xpack.core.security.action.CreateApiKeyFromTemplateRequestBuilder;
+import org.elasticsearch.xpack.core.security.action.SyncApiKeyRequest;
+import org.elasticsearch.xpack.core.security.action.SyncApiKeyRequestBuilder;
 
 import java.io.IOException;
 import java.util.List;
@@ -24,39 +24,35 @@ import static org.elasticsearch.rest.RestRequest.Method.PUT;
 /**
  * Rest action to create an API key
  */
-public final class RestCreateApiKeyFromTemplateAction extends ApiKeyBaseRestHandler {
+public final class RestSyncApiKeyAction extends ApiKeyBaseRestHandler {
 
     /**
      * @param settings the node's settings
      * @param licenseState the license state that will be used to determine if
      * security is licensed
      */
-    public RestCreateApiKeyFromTemplateAction(Settings settings, XPackLicenseState licenseState) {
+    public RestSyncApiKeyAction(Settings settings, XPackLicenseState licenseState) {
         super(settings, licenseState);
     }
 
     @Override
     public List<Route> routes() {
         return List.of(
-            new Route(POST, "/_security/api_key_template/{templateName}/_create"),
-            new Route(PUT, "/_security/api_key_template/{templateName}/_create"));
+            new Route(POST, "/_security/api_key/_sync"),
+            new Route(PUT, "/_security/api_key/_sync"));
     }
 
     @Override
     public String getName() {
-        return "xpack_security_create_api_key_from_template";
+        return "xpack_security_sync_api_key";
     }
 
     @Override
     protected RestChannelConsumer innerPrepareRequest(final RestRequest request, final NodeClient client) throws IOException {
         String refresh = request.param("refresh");
-        final String templateName = request.param("templateName");
-        CreateApiKeyFromTemplateRequestBuilder builder = new CreateApiKeyFromTemplateRequestBuilder(client)
-            .setTemplateName(templateName)
-            .setSyncable(request.paramAsBoolean("syncable", false))
-            .source(request.requiredContent(), request.getXContentType())
+        SyncApiKeyRequestBuilder builder = new SyncApiKeyRequestBuilder(client)
             .setRefreshPolicy((refresh != null) ?
-                WriteRequest.RefreshPolicy.parse(request.param("refresh")) : CreateApiKeyFromTemplateRequest.DEFAULT_REFRESH_POLICY);
+                WriteRequest.RefreshPolicy.parse(request.param("refresh")) : SyncApiKeyRequest.DEFAULT_REFRESH_POLICY);
         return channel -> builder.execute(new RestToXContentListener<>(channel));
     }
 }
