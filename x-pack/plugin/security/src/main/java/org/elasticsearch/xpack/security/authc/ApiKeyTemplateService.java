@@ -223,7 +223,8 @@ public class ApiKeyTemplateService {
             executeAsyncWithOrigin(client, SECURITY_ORIGIN, IndexAction.INSTANCE, indexRequest,
                     ActionListener.wrap(
                             indexResponse -> listener.onResponse(
-                                    new CreateApiKeyTemplateResponse(request.getName(), indexResponse.getId(), expiration)),
+                                    new CreateApiKeyTemplateResponse(request.getName(), indexResponse.getId(), expiration,
+                                        indexResponse.getResult() == DocWriteResponse.Result.CREATED)),
                             listener::onFailure)));
         } catch (IOException e) {
             listener.onFailure(e);

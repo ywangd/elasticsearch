@@ -38,8 +38,8 @@ public final class RestCreateApiKeyFromTemplateAction extends ApiKeyBaseRestHand
     @Override
     public List<Route> routes() {
         return List.of(
-            new Route(POST, "/_security/api_key_template/{templateId}/_create"),
-            new Route(PUT, "/_security/api_key_template/{templateId}/_create"));
+            new Route(POST, "/_security/api_key_template/{templateName}/_create"),
+            new Route(PUT, "/_security/api_key_template/{templateName}/_create"));
     }
 
     @Override
@@ -50,9 +50,9 @@ public final class RestCreateApiKeyFromTemplateAction extends ApiKeyBaseRestHand
     @Override
     protected RestChannelConsumer innerPrepareRequest(final RestRequest request, final NodeClient client) throws IOException {
         String refresh = request.param("refresh");
-        final String templateId = request.param("templateId");
+        final String templateName = request.param("templateName");
         CreateApiKeyFromTemplateRequestBuilder builder = new CreateApiKeyFromTemplateRequestBuilder(client)
-            .setTemplateId(templateId)
+            .setTemplateName(templateName)
             .source(request.requiredContent(), request.getXContentType())
             .setRefreshPolicy((refresh != null) ?
                 WriteRequest.RefreshPolicy.parse(request.param("refresh")) : CreateApiKeyFromTemplateRequest.DEFAULT_REFRESH_POLICY);

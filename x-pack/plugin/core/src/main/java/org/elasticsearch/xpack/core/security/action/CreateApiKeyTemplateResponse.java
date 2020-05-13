@@ -33,24 +33,28 @@ public final class CreateApiKeyTemplateResponse extends ActionResponse implement
 
     static final ConstructingObjectParser<CreateApiKeyTemplateResponse, Void> PARSER = new ConstructingObjectParser<>("create_api_key_template_response",
             args -> new CreateApiKeyTemplateResponse((String) args[0], (String) args[1],
-                    (args[2] == null) ? null : Instant.ofEpochMilli((Long) args[2])));
+                    (args[2] == null) ? null : Instant.ofEpochMilli((Long) args[2]),
+                (Boolean) args[3]));
     static {
         PARSER.declareString(constructorArg(), new ParseField("name"));
         PARSER.declareString(constructorArg(), new ParseField("id"));
         PARSER.declareLong(optionalConstructorArg(), new ParseField("expiration"));
+        PARSER.declareBoolean(optionalConstructorArg(), new ParseField("created"));
     }
 
     private final String name;
     private final String id;
     private final Instant expiration;
+    private final boolean created;
 
-    public CreateApiKeyTemplateResponse(String name, String id, Instant expiration) {
+    public CreateApiKeyTemplateResponse(String name, String id, Instant expiration, boolean created) {
         this.name = name;
         this.id = id;
         // As we do not yet support the nanosecond precision when we serialize to JSON,
         // here creating the 'Instant' of milliseconds precision.
         // This Instant can then be used for date comparison.
         this.expiration = (expiration != null) ? Instant.ofEpochMilli(expiration.toEpochMilli()): null;
+        this.created = created;
     }
 
     public CreateApiKeyTemplateResponse(StreamInput in) throws IOException {
@@ -58,6 +62,7 @@ public final class CreateApiKeyTemplateResponse extends ActionResponse implement
         this.name = in.readString();
         this.id = in.readString();
         this.expiration = in.readOptionalInstant();
+        this.created = in.readBoolean();
     }
 
     public String getName() {
@@ -73,12 +78,16 @@ public final class CreateApiKeyTemplateResponse extends ActionResponse implement
         return expiration;
     }
 
+    public boolean isCreated() {
+        return created;
+    }
+
     @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
         result = prime * result + ((expiration == null) ? 0 : expiration.hashCode());
-        result = prime * result + Objects.hash(id, name);
+        result = prime * result + Objects.hash(id, name, created);
         return result;
     }
 
@@ -97,7 +106,8 @@ public final class CreateApiKeyTemplateResponse extends ActionResponse implement
         } else if (!Objects.equals(expiration, other.expiration))
             return false;
         return Objects.equals(id, other.id)
-                && Objects.equals(name, other.name);
+                && Objects.equals(name, other.name)
+            && created == other.created;
     }
 
     @Override
@@ -105,6 +115,7 @@ public final class CreateApiKeyTemplateResponse extends ActionResponse implement
         out.writeString(name);
         out.writeString(id);
         out.writeOptionalInstant(expiration);
+        out.writeBoolean(created);
     }
 
     public static CreateApiKeyTemplateResponse fromXContent(XContentParser parser) throws IOException {
@@ -119,12 +130,14 @@ public final class CreateApiKeyTemplateResponse extends ActionResponse implement
         if (expiration != null) {
             builder.field("expiration", expiration.toEpochMilli());
         }
+        builder.field("created", created);
         return builder.endObject();
     }
 
     @Override
     public String toString() {
-        return "CreateApiKeyTemplateResponse [name=" + name + ", id=" + id + ", expiration=" + expiration + "]";
+        return "CreateApiKeyTemplateResponse [name=" + name + ", id=" + id + ", expiration=" + expiration
+            + ", created=" + created+ "]";
     }
 
 }

@@ -31,8 +31,8 @@ public final class CreateApiKeyFromTemplateRequestBuilder extends ActionRequestB
         super(client, CreateApiKeyFromTemplateAction.INSTANCE, new CreateApiKeyFromTemplateRequest());
     }
 
-    public CreateApiKeyFromTemplateRequestBuilder setTemplateId(String templateId) {
-        request.setTemplateName(templateId);
+    public CreateApiKeyFromTemplateRequestBuilder setTemplateName(String templateName) {
+        request.setTemplateName(templateName);
         return this;
     }
 
