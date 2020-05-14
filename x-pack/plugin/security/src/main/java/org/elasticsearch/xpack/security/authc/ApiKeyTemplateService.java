@@ -210,7 +210,7 @@ public class ApiKeyTemplateService {
         final Instant expiration = getApiKeyTemplateExpiration(created, request);
         final Version version = clusterService.state().nodes().getMinNodeVersion();
 
-
+        // TODO: an invalidated API key template should not allow update
         try (XContentBuilder builder = newTemplateDocument(
             request.getName(), authentication, roleDescriptorSet, created, expiration, request.getKeyExpiration(),
             request.getRoleDescriptors(), version)) {
