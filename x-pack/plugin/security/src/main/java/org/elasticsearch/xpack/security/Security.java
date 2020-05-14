@@ -88,6 +88,7 @@ import org.elasticsearch.xpack.core.security.action.GetApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.GetApiKeyTemplateAction;
 import org.elasticsearch.xpack.core.security.action.GrantApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.InvalidateApiKeyAction;
+import org.elasticsearch.xpack.core.security.action.InvalidateApiKeyTemplateAction;
 import org.elasticsearch.xpack.core.security.action.SyncApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.oidc.OpenIdConnectAuthenticateAction;
 import org.elasticsearch.xpack.core.security.action.oidc.OpenIdConnectLogoutAction;
@@ -154,6 +155,7 @@ import org.elasticsearch.xpack.security.action.TransportGetApiKeyAction;
 import org.elasticsearch.xpack.security.action.TransportGetApiKeyTemplateAction;
 import org.elasticsearch.xpack.security.action.TransportGrantApiKeyAction;
 import org.elasticsearch.xpack.security.action.TransportInvalidateApiKeyAction;
+import org.elasticsearch.xpack.security.action.TransportInvalidateApiKeyTemplateAction;
 import org.elasticsearch.xpack.security.action.TransportSyncApiKeyAction;
 import org.elasticsearch.xpack.security.action.filter.SecurityActionFilter;
 import org.elasticsearch.xpack.security.action.oidc.TransportOpenIdConnectAuthenticateAction;
@@ -224,6 +226,7 @@ import org.elasticsearch.xpack.security.rest.action.apikey.RestGetApiKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestGetApiKeyTemplateAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestGrantApiKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestInvalidateApiKeyAction;
+import org.elasticsearch.xpack.security.rest.action.apikey.RestInvalidateApiKeyTemplateAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestSyncApiKeyAction;
 import org.elasticsearch.xpack.security.rest.action.oauth2.RestGetTokenAction;
 import org.elasticsearch.xpack.security.rest.action.oauth2.RestInvalidateTokenAction;
@@ -778,6 +781,7 @@ public class Security extends Plugin implements SystemIndexPlugin, IngestPlugin,
                 new ActionHandler<>(CreateApiKeyTemplateAction.INSTANCE, TransportCreateApiKeyTemplateAction.class),
                 new ActionHandler<>(CreateApiKeyFromTemplateAction.INSTANCE, TransportCreateApiKeyFromTemplateAction.class),
                 new ActionHandler<>(GetApiKeyTemplateAction.INSTANCE, TransportGetApiKeyTemplateAction.class),
+                new ActionHandler<>(InvalidateApiKeyTemplateAction.INSTANCE, TransportInvalidateApiKeyTemplateAction.class),
                 new ActionHandler<>(SyncApiKeyAction.INSTANCE, TransportSyncApiKeyAction.class),
                 new ActionHandler<>(GrantApiKeyAction.INSTANCE, TransportGrantApiKeyAction.class),
                 new ActionHandler<>(InvalidateApiKeyAction.INSTANCE, TransportInvalidateApiKeyAction.class),
@@ -838,6 +842,7 @@ public class Security extends Plugin implements SystemIndexPlugin, IngestPlugin,
                 new RestCreateApiKeyTemplateAction(settings, getLicenseState()),
                 new RestCreateApiKeyFromTemplateAction(settings, getLicenseState()),
                 new RestGetApiKeyTemplateAction(settings, getLicenseState()),
+                new RestInvalidateApiKeyTemplateAction(settings, getLicenseState()),
                 new RestSyncApiKeyAction(settings, getLicenseState()),
                 new RestGrantApiKeyAction(settings, getLicenseState()),
                 new RestInvalidateApiKeyAction(settings, getLicenseState()),

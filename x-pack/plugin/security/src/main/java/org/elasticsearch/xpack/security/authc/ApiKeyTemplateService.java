@@ -69,6 +69,7 @@ import org.elasticsearch.xpack.core.security.action.CreateApiKeyTemplateResponse
 import org.elasticsearch.xpack.core.security.action.GetApiKeyResponse;
 import org.elasticsearch.xpack.core.security.action.GetApiKeyTemplateResponse;
 import org.elasticsearch.xpack.core.security.action.InvalidateApiKeyResponse;
+import org.elasticsearch.xpack.core.security.action.InvalidateApiKeyTemplateResponse;
 import org.elasticsearch.xpack.core.security.action.SyncApiKeyRequest;
 import org.elasticsearch.xpack.core.security.action.SyncApiKeyResponse;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
@@ -286,7 +287,15 @@ public class ApiKeyTemplateService {
             .request();
         executeAsyncWithOrigin(client, SECURITY_ORIGIN, GetAction.INSTANCE, getRequest, ActionListener.wrap(
             response -> {
-                createApiKeyAndIndexIt(authentication, request, response.getSource(), listener);
+                final Map<String, Object> source = response.getSource();
+                if ((Boolean)source.get("api_key_template_invalidated")) {
+                    throw new IllegalArgumentException("api key template is invalidated");
+                }
+                final Long expirationTime = (Long) source.get("expiration_time");
+                if (expirationTime != null && clock.instant().isAfter(Instant.ofEpochMilli(expirationTime))) {
+                    throw new IllegalArgumentException("api key template is expired");
+                }
+                createApiKeyAndIndexIt(authentication, request, source, listener);
             },
             listener::onFailure
         ));
@@ -319,8 +328,8 @@ public class ApiKeyTemplateService {
 
         final Set<RoleDescriptor> roleDescriptorSet =
             buildRoleDescriptorSet((Map<String, Object>) source.get("role_descriptors"), request.isSyncable());
-        final Set<RoleDescriptor> limitedByRoleDescriptorSet =
-            buildRoleDescriptorSet((Map<String, Object>) source.get("limited_by_role_descriptors"), request.isSyncable());
+//        final Set<RoleDescriptor> limitedByRoleDescriptorSet =
+//            buildRoleDescriptorSet((Map<String, Object>) source.get("limited_by_role_descriptors"), request.isSyncable());
 
         final long templateLastModified = (long)source.get("last_modified");
 
@@ -328,13 +337,12 @@ public class ApiKeyTemplateService {
         final Object keyExpiration = source.get("key_expiration");
         final Instant expirationTime = keyExpiration == null ? null : creationTime.plusMillis((long) keyExpiration);
 
-
         final Instant created = clock.instant();
         final SecureString apiKey = UUIDs.randomBase64UUIDSecureString();
         final Version version = clusterService.state().nodes().getMinNodeVersion();
 
         try (XContentBuilder builder = newKeyDocument(apiKey, request.getName(), authentication,
-            roleDescriptorSet, limitedByRoleDescriptorSet, request.getTemplateName(), templateLastModified,
+            roleDescriptorSet, null, request.getTemplateName(), templateLastModified,
             created, expirationTime, version)) {
             final IndexRequest indexRequest =
                 client.prepareIndex(SECURITY_MAIN_ALIAS)
@@ -818,35 +826,83 @@ public class ApiKeyTemplateService {
         }
     }
 
-    /**
-     * Invalidate API keys for given realm, user name, API key name and id.
-     * @param realmName realm name
-     * @param username user name
-     * @param apiKeyName API key name
-     * @param apiKeyId API key id
-     * @param invalidateListener listener for {@link InvalidateApiKeyResponse}
-     */
-    public void invalidateApiKeys(String realmName, String username, String apiKeyName, String apiKeyId,
-                                  ActionListener<InvalidateApiKeyResponse> invalidateListener) {
+    public void invalidateApiKeyTemplates(String realmName, String username, String apiKeyTemplateName,
+                                  ActionListener<InvalidateApiKeyTemplateResponse> invalidateListener) {
         ensureEnabled();
-        if (Strings.hasText(realmName) == false && Strings.hasText(username) == false && Strings.hasText(apiKeyName) == false
-            && Strings.hasText(apiKeyId) == false) {
-            logger.trace("none of the parameters [api key id, api key name, username, realm name] were specified for invalidation");
+        if (Strings.hasText(realmName) == false && Strings.hasText(username) == false && Strings.hasText(apiKeyTemplateName) == false) {
+            logger.trace("none of the parameters [api key template name, username, realm name] were specified for invalidation");
             invalidateListener
-                .onFailure(new IllegalArgumentException("One of [api key id, api key name, username, realm name] must be specified"));
+                .onFailure(new IllegalArgumentException("One of [api key template name, username, realm name] must be specified"));
         } else {
-            findApiKeyTemplatesForUserRealmNameCombination(realmName, username, apiKeyName,true, false,
+            findApiKeyTemplatesForUserRealmNameCombination(realmName, username, apiKeyTemplateName,true, false,
                 ActionListener.wrap(apiKeyTemplates -> {
                     if (apiKeyTemplates.isEmpty()) {
                         logger.debug(
-                            "No active api keys to invalidate for realm [{}], username [{}], api key name [{}] and api key id [{}]",
-                            realmName, username, apiKeyName, apiKeyId);
-                        invalidateListener.onResponse(InvalidateApiKeyResponse.emptyResponse());
+                            "No active api key templates to invalidate for realm [{}], username [{}], api key name [{}]",
+                            realmName, username, apiKeyTemplateName);
+                        invalidateListener.onResponse(InvalidateApiKeyTemplateResponse.emptyResponse());
                     } else {
-                        invalidateAllApiKeys(apiKeyTemplates.stream().map(apiKeyTemplate -> "api_key_template:" + apiKeyTemplate.getName()).collect(Collectors.toSet()),
+                        invalidateAllApiKeyTemplates(apiKeyTemplates.stream().map(apiKeyTemplate -> "api_key_template:" + apiKeyTemplate.getName()).collect(Collectors.toSet()),
                             invalidateListener);
                     }
                 }, invalidateListener::onFailure));
+        }
+    }
+
+    private void invalidateAllApiKeyTemplates(Collection<String> apiKeyTemplateIds, ActionListener<InvalidateApiKeyTemplateResponse> invalidateListener) {
+        indexInvalidationApiKeyTemplate(apiKeyTemplateIds, invalidateListener, null);
+    }
+
+    private void indexInvalidationApiKeyTemplate(Collection<String> apiKeyTemplateIds, ActionListener<InvalidateApiKeyTemplateResponse> listener,
+        @Nullable InvalidateApiKeyResponse previousResult) {
+//        maybeStartApiKeyRemover();
+        if (apiKeyTemplateIds.isEmpty()) {
+            listener.onFailure(new ElasticsearchSecurityException("No api key template ids provided for invalidation"));
+        } else {
+            BulkRequestBuilder bulkRequestBuilder = client.prepareBulk();
+            for (String apiKeyTemplateId : apiKeyTemplateIds) {
+                UpdateRequest request = client
+                    .prepareUpdate(SECURITY_MAIN_ALIAS, apiKeyTemplateId)
+                    .setDoc(Collections.singletonMap("api_key_template_invalidated", true))
+                    .request();
+                bulkRequestBuilder.add(request);
+            }
+            bulkRequestBuilder.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
+            securityIndex.prepareIndexIfNeededThenExecute(ex -> listener.onFailure(traceLog("prepare security index", ex)),
+                () -> executeAsyncWithOrigin(client.threadPool().getThreadContext(), SECURITY_ORIGIN, bulkRequestBuilder.request(),
+                    ActionListener.<BulkResponse>wrap(bulkResponse -> {
+                        ArrayList<ElasticsearchException> failedRequestResponses = new ArrayList<>();
+                        ArrayList<String> previouslyInvalidated = new ArrayList<>();
+                        ArrayList<String> invalidated = new ArrayList<>();
+                        if (null != previousResult) {
+                            failedRequestResponses.addAll((previousResult.getErrors()));
+                            previouslyInvalidated.addAll(previousResult.getPreviouslyInvalidatedApiKeys());
+                            invalidated.addAll(previousResult.getInvalidatedApiKeys());
+                        }
+                        for (BulkItemResponse bulkItemResponse : bulkResponse.getItems()) {
+                            if (bulkItemResponse.isFailed()) {
+                                Throwable cause = bulkItemResponse.getFailure().getCause();
+                                final String failedApiKeyTemplateId = bulkItemResponse.getFailure().getId();
+                                traceLog("invalidate api key template", failedApiKeyTemplateId, cause);
+                                failedRequestResponses.add(new ElasticsearchException("Error invalidating api key", cause));
+                            } else {
+                                UpdateResponse updateResponse = bulkItemResponse.getResponse();
+                                if (updateResponse.getResult() == DocWriteResponse.Result.UPDATED) {
+                                    logger.debug("Invalidated api key template for doc [{}]", updateResponse.getId());
+                                    invalidated.add(updateResponse.getId());
+                                } else if (updateResponse.getResult() == DocWriteResponse.Result.NOOP) {
+                                    previouslyInvalidated.add(updateResponse.getId());
+                                }
+                            }
+                        }
+                        InvalidateApiKeyTemplateResponse result = new InvalidateApiKeyTemplateResponse(invalidated, previouslyInvalidated,
+                            failedRequestResponses);
+                        listener.onResponse(result);
+                    }, e -> {
+                        Throwable cause = ExceptionsHelper.unwrapCause(e);
+                        traceLog("invalidate api key templates", cause);
+                        listener.onFailure(e);
+                    }), client::bulk));
         }
     }
 

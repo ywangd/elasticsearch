@@ -38,8 +38,7 @@ public final class RestCreateApiKeyTemplateAction extends ApiKeyBaseRestHandler 
     @Override
     public List<Route> routes() {
         return List.of(
-            new Route(POST, "/_security/api_key_template"),
-            new Route(PUT, "/_security/api_key_template"));
+            new Route(POST, "/_security/api_key_template"));
     }
 
     @Override
