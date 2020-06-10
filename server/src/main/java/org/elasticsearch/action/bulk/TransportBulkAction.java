@@ -98,7 +98,8 @@ import static java.util.Collections.emptyMap;
  */
 public class TransportBulkAction extends HandledTransportAction<BulkRequest, BulkResponse> {
 
-    public static final Setting<Boolean> SKIP_STRESS_INDEXING = Setting.boolSetting("indexing.skip_stress", true);
+    public static final Setting<Boolean> SKIP_STRESS_INDEXING = Setting.boolSetting(
+        "indexing.skip_stress", true, Setting.Property.NodeScope);
 
     private final ThreadPool threadPool;
     private final AutoCreateIndex autoCreateIndex;
