@@ -220,11 +220,11 @@ public class CompositeRolesStore {
                 if (descriptors == null) {
                     roleActionListener.onFailure(new IllegalStateException("missing role descriptors"));
                 } else if (apiKeyRoleDescriptors.getLimitedByRoleDescriptors() == null) {
-                    buildAndCacheRoleFromDescriptors(descriptors, "api_key_role", roleActionListener);
+                    buildAndCacheRoleFromDescriptors(descriptors, apiKeyRoleDescriptors.getApiKeyId() + "_role_desc", roleActionListener);
                 } else {
                     buildAndCacheRoleFromDescriptors(descriptors, apiKeyRoleDescriptors.getApiKeyId() + "_role_desc",
                         ActionListener.wrap(role -> buildAndCacheRoleFromDescriptors(apiKeyRoleDescriptors.getLimitedByRoleDescriptors(),
-                            "api_key_limited_role", ActionListener.wrap(
+                            apiKeyRoleDescriptors.getApiKeyId() + "_limited_role_desc", ActionListener.wrap(
                                 limitedBy -> roleActionListener.onResponse(LimitedRole.createLimitedRole(role, limitedBy)),
                                 roleActionListener::onFailure)), roleActionListener::onFailure));
                 }
