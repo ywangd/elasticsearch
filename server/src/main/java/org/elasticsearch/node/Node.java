@@ -206,6 +206,8 @@ public class Node implements Closeable {
     public static final Recorder restRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
     public static final Recorder authenticationRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
     public static final Recorder authorizationRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
+    public static final Recorder docHasherRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
+    public static final Recorder cacheHasherRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
 
     /**
     * controls whether the node is allowed to persist things like metadata to disk
@@ -341,6 +343,8 @@ public class Node implements Closeable {
             RecordJFR.scheduleHistogramSample("Rest", threadPool, new AtomicReference<>(restRecorder));
             RecordJFR.scheduleHistogramSample("Authentication", threadPool, new AtomicReference<>(authenticationRecorder));
             RecordJFR.scheduleHistogramSample("Authorization", threadPool, new AtomicReference<>(authorizationRecorder));
+            RecordJFR.scheduleHistogramSample("DocHasher", threadPool, new AtomicReference<>(docHasherRecorder));
+            RecordJFR.scheduleHistogramSample("CacheHasher", threadPool, new AtomicReference<>(cacheHasherRecorder));
 
             resourcesToClose.add(() -> ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS));
             // adds the context to the DeprecationLogger so that it does not need to be injected everywhere

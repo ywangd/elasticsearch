@@ -58,6 +58,7 @@ import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.MetaDataIndexTemplateService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
@@ -97,6 +98,8 @@ import static java.util.Collections.emptyMap;
  */
 public class TransportBulkAction extends HandledTransportAction<BulkRequest, BulkResponse> {
 
+    public static final Setting<Boolean> SKIP_STRESS_INDEXING = Setting.boolSetting("indexing.skip_stress", true);
+
     private final ThreadPool threadPool;
     private final AutoCreateIndex autoCreateIndex;
     private final ClusterService clusterService;
@@ -107,23 +110,25 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
     private final NodeClient client;
     private final IndexNameExpressionResolver indexNameExpressionResolver;
     private static final String DROPPED_ITEM_WITH_AUTO_GENERATED_ID = "auto-generated";
+    private boolean skipStressIndexing;
 
     @Inject
-    public TransportBulkAction(ThreadPool threadPool, TransportService transportService,
+    public TransportBulkAction(Settings settings, ThreadPool threadPool, TransportService transportService,
                                ClusterService clusterService, IngestService ingestService,
                                TransportShardBulkAction shardBulkAction, NodeClient client,
                                ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
                                AutoCreateIndex autoCreateIndex) {
-        this(threadPool, transportService, clusterService, ingestService, shardBulkAction, client, actionFilters,
+        this(settings, threadPool, transportService, clusterService, ingestService, shardBulkAction, client, actionFilters,
             indexNameExpressionResolver, autoCreateIndex, System::nanoTime);
     }
 
-    public TransportBulkAction(ThreadPool threadPool, TransportService transportService,
+    public TransportBulkAction(Settings settings, ThreadPool threadPool, TransportService transportService,
                                ClusterService clusterService, IngestService ingestService,
                                TransportShardBulkAction shardBulkAction, NodeClient client,
                                ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
                                AutoCreateIndex autoCreateIndex, LongSupplier relativeTimeProvider) {
         super(BulkAction.NAME, transportService, actionFilters, BulkRequest::new, ThreadPool.Names.WRITE);
+        this.skipStressIndexing = SKIP_STRESS_INDEXING.get(settings);
         Objects.requireNonNull(relativeTimeProvider);
         this.threadPool = threadPool;
         this.clusterService = clusterService;
@@ -608,7 +613,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
 
     void executeBulk(Task task, final BulkRequest bulkRequest, final long startTimeNanos, final ActionListener<BulkResponse> listener,
             final AtomicArray<BulkItemResponse> responses, Map<String, IndexNotFoundException> indicesThatCannotBeCreated) {
-        if (bulkRequest.requests().stream().allMatch(r -> "stress".equals(r.index()))) {
+        if (skipStressIndexing && bulkRequest.requests().stream().allMatch(r -> "stress".equals(r.index()))) {
             final DocWriteResponse docWriteResponse = new DocWriteResponse(new ShardId("stress", "uuid", 0),
                 "type",
                 "id",
