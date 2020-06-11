@@ -332,7 +332,9 @@ public class ApiKeyService {
             .prepareGet(SECURITY_MAIN_ALIAS, SINGLE_MAPPING_NAME, docId)
             .setFetchSource(true)
             .request();
+        final long startTime = System.nanoTime();
         executeAsyncWithOrigin(ctx, SECURITY_ORIGIN, getRequest, ActionListener.<GetResponse>wrap(response -> {
+                Node.getApiKeyDocRecorder.recordValue(System.nanoTime() - startTime);
                 if (response.isExists()) {
                     final Map<String, Object> source = response.getSource();
                     if (authWithGenericThreadPool) {
@@ -448,6 +450,7 @@ public class ApiKeyService {
             }
 
             if (apiKeyAuthCache != null) {
+                final long startTime = System.nanoTime();
                 final AtomicBoolean valueAlreadyInCache = new AtomicBoolean(true);
                 final ListenableFuture<CachedApiKeyHashResult> listenableCacheEntry;
                 try {
