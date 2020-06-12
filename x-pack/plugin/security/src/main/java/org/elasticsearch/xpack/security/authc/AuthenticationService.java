@@ -613,7 +613,9 @@ public class AuthenticationService {
                 listener.onResponse(authentication);
             };
             try {
+                final long startTime = System.nanoTime();
                 authentication.writeToContext(threadContext);
+                Node.writeAuthRecorder.recordValue(System.nanoTime() - startTime);
             } catch (Exception e) {
                 action = () -> {
                     logger.debug(

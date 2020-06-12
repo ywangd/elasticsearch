@@ -336,7 +336,9 @@ public class ApiKeyService {
         executeAsyncWithOrigin(ctx, SECURITY_ORIGIN, getRequest, ActionListener.<GetResponse>wrap(response -> {
                 Node.getApiKeyDocRecorder.recordValue(System.nanoTime() - startTime);
                 if (response.isExists()) {
+                    final long startTime1 = System.nanoTime();
                     final Map<String, Object> source = response.getSource();
+                    Node.getSourceRecorder.recordValue(System.nanoTime() - startTime1);
                     if (authWithGenericThreadPool) {
                         threadPool.generic().execute(() -> validateApiKeyCredentials(docId, source, credentials, clock, listener));
                     } else {
