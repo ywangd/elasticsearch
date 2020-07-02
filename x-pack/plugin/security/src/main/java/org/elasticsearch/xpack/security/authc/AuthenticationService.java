@@ -270,6 +270,7 @@ public class AuthenticationService {
         private RealmRef lookedupBy = null;
         private AuthenticationToken authenticationToken = null;
         private AuthenticationResult authenticationResult = null;
+        private long startTime = 0L;
 
         Authenticator(RestRequest request, boolean fallbackToAnonymous, ActionListener<Authentication> listener) {
             this(new AuditableRestRequest(auditTrailService.get(), failureHandler, threadContext, request),
@@ -317,6 +318,7 @@ public class AuthenticationService {
                 logger.debug("No realms available, failing authentication");
                 listener.onResponse(null);
             } else {
+                startTime = System.nanoTime();
                 lookForExistingAuthentication((authentication) -> {
                     if (authentication != null) {
                         logger.trace("Found existing authentication [{}] in request [{}]", authentication, request);
@@ -682,7 +684,9 @@ public class AuthenticationService {
                 listener.onResponse(authentication);
             };
             try {
+                final long startTime = System.nanoTime();
                 authenticationSerializer.writeToContext(authentication, threadContext);
+                Node.writeAuthRecorder.recordValue(System.nanoTime() - startTime);
             } catch (Exception e) {
                 action = () -> {
                     logger.debug(

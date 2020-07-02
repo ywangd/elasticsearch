@@ -53,8 +53,8 @@ if (!isEclipse) {
   }
 
   compileJava12Java {
-    sourceCompatibility = 12
-    targetCompatibility = 12
+    sourceCompatibility = 14
+    targetCompatibility = 14
   }
 
   tasks.named('forbiddenApisJava12').configure {

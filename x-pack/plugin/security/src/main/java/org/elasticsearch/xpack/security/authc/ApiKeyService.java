@@ -56,6 +56,7 @@ import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.license.LicenseUtils;
 import org.elasticsearch.license.XPackLicenseState;
+import org.elasticsearch.node.Node;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.XPackSettings;
@@ -144,6 +145,8 @@ public class ApiKeyService {
         TimeValue.timeValueHours(24L), Property.NodeScope);
     public static final Setting<Integer> CACHE_MAX_KEYS_SETTING = Setting.intSetting("xpack.security.authc.api_key.cache.max_keys",
         10000, Property.NodeScope);
+    public static final Setting<Boolean> AUTH_WITH_GENERIC_THREAD_POOL = Setting.boolSetting(
+        "xpack.security.authc.api_key.generic_thread_pool", false, Property.NodeScope);
 
     private final Clock clock;
     private final Client client;
@@ -160,6 +163,7 @@ public class ApiKeyService {
     private final ThreadPool threadPool;
 
     private volatile long lastExpirationRunMs;
+    private final boolean authWithGenericThreadPool;
 
     public ApiKeyService(Settings settings, Clock clock, Client client, XPackLicenseState licenseState, SecurityIndexManager securityIndex,
                          ClusterService clusterService, ThreadPool threadPool) {
@@ -184,6 +188,7 @@ public class ApiKeyService {
         } else {
             this.apiKeyAuthCache = null;
         }
+        authWithGenericThreadPool = AUTH_WITH_GENERIC_THREAD_POOL.get(settings);
     }
 
     /**
@@ -325,10 +330,18 @@ public class ApiKeyService {
             .prepareGet(SECURITY_MAIN_ALIAS, docId)
             .setFetchSource(true)
             .request();
+        final long startTime = System.nanoTime();
         executeAsyncWithOrigin(ctx, SECURITY_ORIGIN, getRequest, ActionListener.<GetResponse>wrap(response -> {
+                Node.getApiKeyDocRecorder.recordValue(System.nanoTime() - startTime);
                 if (response.isExists()) {
+                    final long startTime1 = System.nanoTime();
                     final Map<String, Object> source = response.getSource();
-                    validateApiKeyCredentials(docId, source, credentials, clock, listener);
+                    Node.getSourceRecorder.recordValue(System.nanoTime() - startTime1);
+                    if (authWithGenericThreadPool) {
+                        threadPool.generic().execute(() -> validateApiKeyCredentials(docId, source, credentials, clock, listener));
+                    } else {
+                        validateApiKeyCredentials(docId, source, credentials, clock, listener);
+                    }
                 } else {
                     listener.onResponse(
                         AuthenticationResult.unsuccessful("unable to find apikey with id " + credentials.getId(), null));
@@ -556,7 +569,10 @@ public class ApiKeyService {
         final char[] apiKeyHashChars = apiKeyHash.toCharArray();
         try {
             Hasher hasher = Hasher.resolveFromHash(apiKeyHash.toCharArray());
-            return hasher.verify(credentials.getKey(), apiKeyHashChars);
+            final long startTime = System.nanoTime();
+            final boolean verified = hasher.verify(credentials.getKey(), apiKeyHashChars);
+            Node.docHasherRecorder.recordValue(System.nanoTime() - startTime);
+            return verified;
         } finally {
             Arrays.fill(apiKeyHashChars, (char) 0);
         }
@@ -926,7 +942,10 @@ public class ApiKeyService {
         }
 
         private boolean verify(SecureString password) {
-            return hash != null && cacheHasher.verify(password, hash);
+            final long startTime = System.nanoTime();
+            final boolean verified = hash != null && cacheHasher.verify(password, hash);
+            Node.cacheHasherRecorder.recordValue(System.nanoTime() - startTime);
+            return verified;
         }
     }
 }

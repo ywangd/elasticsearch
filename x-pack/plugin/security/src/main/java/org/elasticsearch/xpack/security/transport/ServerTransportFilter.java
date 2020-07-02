@@ -31,6 +31,10 @@ import org.elasticsearch.xpack.security.action.SecurityActionMapper;
 import org.elasticsearch.xpack.security.authc.AuthenticationService;
 import org.elasticsearch.xpack.security.authz.AuthorizationService;
 
+import java.util.function.BiConsumer;
+
+import static org.elasticsearch.xpack.core.security.SecurityHelper.getAuthRecorder;
+
 /**
  * The server transport filter that should be used in nodes as it ensures that an incoming
  * request is properly authenticated and authorized
@@ -99,16 +103,24 @@ final class ServerTransportFilter {
         }
 
         final Version version = transportChannel.getVersion();
+
+        final BiConsumer<Logger, String> authenticateRecorder = getAuthRecorder(threadContext, true);
         authcService.authenticate(securityAction, request, true, ActionListener.wrap((authentication) -> {
             if (authentication != null) {
+                authenticateRecorder.accept(logger, securityAction);
+                final BiConsumer<Logger, String> authorizationRecorder = getAuthRecorder(threadContext, false);
+                final ActionListener<Void> wrappedListener = ActionListener.wrap((e) -> {
+                    authorizationRecorder.accept(logger, securityAction);
+                    listener.onResponse(e);
+                }, listener::onFailure);
                 if (securityAction.equals(TransportService.HANDSHAKE_ACTION_NAME) &&
                     SystemUser.is(authentication.getUser()) == false) {
                     securityContext.executeAsUser(SystemUser.INSTANCE, (ctx) -> {
                         final Authentication replaced = securityContext.getAuthentication();
-                        authzService.authorize(replaced, securityAction, request, listener);
+                        authzService.authorize(replaced, securityAction, request, wrappedListener);
                     }, version);
                 } else {
-                    authzService.authorize(authentication, securityAction, request, listener);
+                    authzService.authorize(authentication, securityAction, request, wrappedListener);
                 }
             } else if (licenseState.isSecurityEnabled() == false) {
                 listener.onResponse(null);

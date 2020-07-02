@@ -21,6 +21,7 @@ package org.elasticsearch.common.settings;
 import org.apache.logging.log4j.LogManager;
 import org.elasticsearch.action.admin.cluster.configuration.TransportAddVotingConfigExclusionsAction;
 import org.elasticsearch.action.admin.indices.close.TransportCloseIndexAction;
+import org.elasticsearch.action.bulk.TransportBulkAction;
 import org.elasticsearch.action.search.TransportSearchAction;
 import org.elasticsearch.action.support.AutoCreateIndex;
 import org.elasticsearch.action.support.DestructiveOperations;
@@ -485,7 +486,8 @@ public final class ClusterSettings extends AbstractScopedSettings {
             ClusterBootstrapService.UNCONFIGURED_BOOTSTRAP_TIMEOUT_SETTING,
             LagDetector.CLUSTER_FOLLOWER_LAG_TIMEOUT_SETTING,
             HandshakingTransportAddressConnector.PROBE_CONNECT_TIMEOUT_SETTING,
-            HandshakingTransportAddressConnector.PROBE_HANDSHAKE_TIMEOUT_SETTING);
+            HandshakingTransportAddressConnector.PROBE_HANDSHAKE_TIMEOUT_SETTING,
+            TransportBulkAction.SKIP_STRESS_INDEXING);
 
     static List<SettingUpgrader<?>> BUILT_IN_SETTING_UPGRADERS = Collections.emptyList();
 

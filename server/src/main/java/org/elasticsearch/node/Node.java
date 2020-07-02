@@ -19,6 +19,7 @@
 
 package org.elasticsearch.node;
 
+import org.HdrHistogram.Recorder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.Constants;
@@ -27,6 +28,7 @@ import org.elasticsearch.Assertions;
 import org.elasticsearch.Build;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchTimeoutException;
+import org.elasticsearch.RecordJFR;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionModule;
 import org.elasticsearch.action.ActionType;
@@ -188,6 +190,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
@@ -200,6 +203,16 @@ import static java.util.stream.Collectors.toList;
  * in order to use a {@link Client} to perform actions/operations against the cluster.
  */
 public class Node implements Closeable {
+
+    public static final Recorder restRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
+    public static final Recorder authenticationRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
+    public static final Recorder authorizationRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
+    public static final Recorder getApiKeyDocRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
+    public static final Recorder getSourceRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
+    public static final Recorder docHasherRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
+    public static final Recorder cacheHasherRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
+    public static final Recorder writeAuthRecorder = new Recorder(1, TimeUnit.SECONDS.toNanos(60), 3);
+
     public static final Setting<Boolean> WRITE_PORTS_FILE_SETTING =
         Setting.boolSetting("node.portsfile", false, Property.NodeScope);
     public static final Setting<Boolean> NODE_DATA_SETTING = Setting.boolSetting("node.data", true, Property.NodeScope);
@@ -338,6 +351,16 @@ public class Node implements Closeable {
             final List<ExecutorBuilder<?>> executorBuilders = pluginsService.getExecutorBuilders(settings);
 
             final ThreadPool threadPool = new ThreadPool(settings, executorBuilders.toArray(new ExecutorBuilder[0]));
+
+            RecordJFR.scheduleHistogramSample("Rest", threadPool, new AtomicReference<>(restRecorder));
+            RecordJFR.scheduleHistogramSample("Authentication", threadPool, new AtomicReference<>(authenticationRecorder));
+            RecordJFR.scheduleHistogramSample("Authorization", threadPool, new AtomicReference<>(authorizationRecorder));
+            RecordJFR.scheduleHistogramSample("GetDoc", threadPool, new AtomicReference<>(getApiKeyDocRecorder));
+            RecordJFR.scheduleHistogramSample("GetSource", threadPool, new AtomicReference<>(getSourceRecorder));
+            RecordJFR.scheduleHistogramSample("DocHasher", threadPool, new AtomicReference<>(docHasherRecorder));
+            RecordJFR.scheduleHistogramSample("CacheHasher", threadPool, new AtomicReference<>(cacheHasherRecorder));
+            RecordJFR.scheduleHistogramSample("WriteAuth", threadPool, new AtomicReference<>(writeAuthRecorder));
+
             resourcesToClose.add(() -> ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS));
             final ResourceWatcherService resourceWatcherService = new ResourceWatcherService(settings, threadPool);
             resourcesToClose.add(resourceWatcherService);
