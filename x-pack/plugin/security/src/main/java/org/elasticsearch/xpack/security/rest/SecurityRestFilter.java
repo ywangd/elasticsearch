@@ -28,6 +28,9 @@ import org.elasticsearch.xpack.security.transport.SSLEngineUtils;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.function.BiConsumer;
+
+import static org.elasticsearch.xpack.core.security.SecurityHelper.getAuthRecorder;
 
 public class SecurityRestFilter implements RestHandler {
 
@@ -58,13 +61,14 @@ public class SecurityRestFilter implements RestHandler {
                 HttpChannel httpChannel = request.getHttpChannel();
                 SSLEngineUtils.extractClientCertificates(logger, threadContext, httpChannel);
             }
-
+            final BiConsumer<Logger, String> authenticateRecorder = getAuthRecorder(threadContext, true);
             final String requestUri = request.uri();
             authenticationService.authenticate(maybeWrapRestRequest(request), ActionListener.wrap(
                 authentication -> {
                     if (authentication == null) {
                         logger.trace("No authentication available for REST request [{}]", requestUri);
                     } else {
+                        authenticateRecorder.accept(logger, request.uri());
                         logger.trace("Authenticated REST request [{}] as {}", requestUri, authentication);
                     }
                     secondaryAuthenticator.authenticateAndAttachToContext(request, ActionListener.wrap(

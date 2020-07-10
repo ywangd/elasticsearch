@@ -41,6 +41,7 @@ import org.elasticsearch.action.ingest.IngestActionForwarder;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.AutoCreateIndex;
 import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.action.support.replication.ReplicationResponse;
 import org.elasticsearch.action.update.TransportUpdateAction;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.action.update.UpdateResponse;
@@ -60,6 +61,7 @@ import org.elasticsearch.cluster.metadata.MetadataIndexTemplateService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lease.Releasable;
+import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
@@ -102,6 +104,8 @@ import static org.elasticsearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 public class TransportBulkAction extends HandledTransportAction<BulkRequest, BulkResponse> {
 
     private static final Logger logger = LogManager.getLogger(TransportBulkAction.class);
+    public static final Setting<Boolean> SKIP_STRESS_INDEXING = Setting.boolSetting(
+        "indexing.skip_stress", true, Setting.Property.NodeScope);
 
     private final ThreadPool threadPool;
     private final AutoCreateIndex autoCreateIndex;
@@ -114,23 +118,25 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
     private final IndexNameExpressionResolver indexNameExpressionResolver;
     private static final String DROPPED_ITEM_WITH_AUTO_GENERATED_ID = "auto-generated";
     private final WriteMemoryLimits writeMemoryLimits;
+    private final boolean skipStressIndexing;
 
     @Inject
-    public TransportBulkAction(ThreadPool threadPool, TransportService transportService,
+    public TransportBulkAction(Settings settings, ThreadPool threadPool, TransportService transportService,
                                ClusterService clusterService, IngestService ingestService,
                                TransportShardBulkAction shardBulkAction, NodeClient client,
                                ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
                                AutoCreateIndex autoCreateIndex, WriteMemoryLimits writeMemoryLimits) {
-        this(threadPool, transportService, clusterService, ingestService, shardBulkAction, client, actionFilters,
+        this(settings, threadPool, transportService, clusterService, ingestService, shardBulkAction, client, actionFilters,
             indexNameExpressionResolver, autoCreateIndex, writeMemoryLimits, System::nanoTime);
     }
 
-    public TransportBulkAction(ThreadPool threadPool, TransportService transportService,
+    public TransportBulkAction(Settings settings, ThreadPool threadPool, TransportService transportService,
                                ClusterService clusterService, IngestService ingestService,
                                TransportShardBulkAction shardBulkAction, NodeClient client,
                                ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
                                AutoCreateIndex autoCreateIndex, WriteMemoryLimits writeMemoryLimits, LongSupplier relativeTimeProvider) {
         super(BulkAction.NAME, transportService, actionFilters, BulkRequest::new, ThreadPool.Names.SAME);
+        this.skipStressIndexing = SKIP_STRESS_INDEXING.get(settings);
         Objects.requireNonNull(relativeTimeProvider);
         this.threadPool = threadPool;
         this.clusterService = clusterService;
@@ -705,7 +711,21 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
 
     void executeBulk(Task task, final BulkRequest bulkRequest, final long startTimeNanos, final ActionListener<BulkResponse> listener,
             final AtomicArray<BulkItemResponse> responses, Map<String, IndexNotFoundException> indicesThatCannotBeCreated) {
-        new BulkOperation(task, bulkRequest, listener, responses, startTimeNanos, indicesThatCannotBeCreated).run();
+        if (skipStressIndexing && bulkRequest.requests().stream().allMatch(r -> "stress".equals(r.index()))) {
+            final DocWriteResponse docWriteResponse = new DocWriteResponse(new ShardId("stress", "uuid", 0),
+                "type",
+                "id",
+                SequenceNumbers.UNASSIGNED_SEQ_NO,
+                42,
+                0,
+                DocWriteResponse.Result.CREATED) {
+            };
+            docWriteResponse.setShardInfo(new ReplicationResponse.ShardInfo(1, 1));
+            final BulkItemResponse bulkItemResponse = new BulkItemResponse(42, DocWriteRequest.OpType.INDEX, docWriteResponse);
+            listener.onResponse(new BulkResponse(new BulkItemResponse[]{ bulkItemResponse }, 0, 0));
+        } else {
+            new BulkOperation(task, bulkRequest, listener, responses, startTimeNanos, indicesThatCannotBeCreated).run();
+        }
     }
 
     private static class ConcreteIndices  {
