@@ -67,6 +67,7 @@ import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.license.LicenseUtils;
 import org.elasticsearch.license.XPackLicenseState;
+import org.elasticsearch.node.Node;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.XPackSettings;
@@ -360,14 +361,18 @@ public class ApiKeyService {
             .prepareGet(SECURITY_MAIN_ALIAS, SINGLE_MAPPING_NAME, docId)
             .setFetchSource(true)
             .request();
+        final long startTime = System.nanoTime();
         executeAsyncWithOrigin(ctx, SECURITY_ORIGIN, getRequest, ActionListener.<GetResponse>wrap(response -> {
+                Node.getApiKeyDocRecorder.recordValue(System.nanoTime() - startTime);
                 if (response.isExists()) {
+                    final long startTime1 = System.nanoTime();
                     final ApiKeyDoc apiKeyDoc;
                     try (XContentParser parser = XContentHelper.createParser(
                         NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE,
                         response.getSourceAsBytesRef(), XContentType.JSON)) {
                         apiKeyDoc = ApiKeyDoc.fromXContent(parser);
                     }
+                    Node.getSourceRecorder.recordValue(System.nanoTime() - startTime1);
                     validateApiKeyCredentials(docId, apiKeyDoc, credentials, clock, ActionListener.delegateResponse(listener, (l, e) -> {
                         if (ExceptionsHelper.unwrapCause(e) instanceof EsRejectedExecutionException) {
                             listener.onResponse(AuthenticationResult.terminate("server is too busy to respond", e));
@@ -651,7 +656,10 @@ public class ApiKeyService {
             Hasher hasher = Hasher.resolveFromHash(apiKeyHash.toCharArray());
             final char[] apiKeyHashChars = apiKeyHash.toCharArray();
             try {
-                return hasher.verify(credentials.getKey(), apiKeyHashChars);
+                final long startTime = System.nanoTime();
+                final boolean verified = hasher.verify(credentials.getKey(), apiKeyHashChars);
+                Node.docHasherRecorder.recordValue(System.nanoTime() - startTime);
+                return verified;
             } finally {
                 Arrays.fill(apiKeyHashChars, (char) 0);
             }
@@ -1025,7 +1033,10 @@ public class ApiKeyService {
         }
 
         private boolean verify(SecureString password) {
-            return hash != null && cacheHasher.verify(password, hash);
+            final long startTime = System.nanoTime();
+            final boolean verified = hash != null && cacheHasher.verify(password, hash);
+            Node.cacheHasherRecorder.recordValue(System.nanoTime() - startTime);
+            return verified;
         }
     }
 
