@@ -177,7 +177,7 @@ public class ApiKeyService {
     private final Cache<String, ListenableFuture<CachedApiKeyHashResult>> apiKeyAuthCache;
     private final Hasher cacheHasher;
     private final ThreadPool threadPool;
-    private final SecurityCaches.SecurityCache<CachedApiKeyDoc> apiKeyDocCache;
+    private final SecurityCaches.DirectSecurityCache<CachedApiKeyDoc> apiKeyDocCache;
     private final Cache<String, BytesReference> roleDescriptorsBytesCache;
 
     private volatile long lastExpirationRunMs;
