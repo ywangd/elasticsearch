@@ -110,6 +110,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -177,7 +178,7 @@ public class ApiKeyService {
     private final Cache<String, ListenableFuture<CachedApiKeyHashResult>> apiKeyAuthCache;
     private final Hasher cacheHasher;
     private final ThreadPool threadPool;
-    private final SecurityCaches.DirectSecurityCache<CachedApiKeyDoc> apiKeyDocCache;
+    private final SecurityCaches.DirectSecurityCache<String, CachedApiKeyDoc, ApiKeyDoc> apiKeyDocCache;
     private final Cache<String, BytesReference> roleDescriptorsBytesCache;
 
     private volatile long lastExpirationRunMs;
@@ -209,16 +210,38 @@ public class ApiKeyService {
             .setExpireAfterWrite(TimeValue.timeValueMinutes(5)) // TODO: this can be indefinite
             .setMaximumWeight(10_000)
             .build();
-        apiKeyDocCache = SecurityCaches.newSecurityCache(
+        apiKeyDocCache = SecurityCaches.newDirectSecurityCache(
             "apiKeyDoc",
-            CacheBuilder.<String, CachedApiKeyDoc>builder().setExpireAfterWrite(TimeValue.timeValueMinutes(5))
-                .setMaximumWeight(10_000)
-                .build(),
-            keys -> {
-                if (keys == null) {
+            l -> CacheBuilder.<String, CachedApiKeyDoc>builder()
+                .setExpireAfterWrite(TimeValue.timeValueMinutes(5))
+                    .setMaximumWeight(10_000)
+                    .removalListener(l)
+                    .build(),
+            SecurityCaches.StringKeyedInvalidatable::of,
+            List.of(new SecurityCaches.SecondaryCache<>() {
+                @Override
+                public void cache(Tuple<String, CachedApiKeyDoc> primaryItem, ApiKeyDoc originalValue) {
+
+                    try {
+                        roleDescriptorsBytesCache.computeIfAbsent(primaryItem.v2().roleDescriptorsHash,
+                            k -> originalValue.roleDescriptorsBytes);
+                        roleDescriptorsBytesCache.computeIfAbsent(primaryItem.v2().limitedByRoleDescriptorsHash,
+                            k -> originalValue.limitedByRoleDescriptorsBytes);
+                    } catch (ExecutionException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+                @Override
+                public void invalidate(Collection<Tuple<String, CachedApiKeyDoc>> primaryItems) {
+                    // do nothing since the descriptor bytes maybe shared by other API keys
+                }
+
+                @Override
+                public void invalidateAll() {
                     roleDescriptorsBytesCache.invalidateAll();
                 }
-            });
+            }));
     }
 
     /**
@@ -369,43 +392,7 @@ public class ApiKeyService {
     private void loadApiKeyAndValidateCredentials(ThreadContext ctx, ApiKeyCredentials credentials,
                                                   ActionListener<AuthenticationResult> listener) {
         final String docId = credentials.getId();
-        CachedApiKeyDoc existing = apiKeyDocCache.get(docId);
-        if (existing != null) {
-            final BytesReference roleDescriptorsBytes = roleDescriptorsBytesCache.get(existing.roleDescriptorsHash);
-            final BytesReference limitedByRoleDescriptorsBytes = roleDescriptorsBytesCache.get(existing.limitedByRoleDescriptorsHash);
-            if (roleDescriptorsBytes != null && limitedByRoleDescriptorsBytes != null) {
-                validateApiKeyCredentials(docId, existing.toApiKeyDoc(roleDescriptorsBytes, limitedByRoleDescriptorsBytes),
-                    credentials, clock, ActionListener.delegateResponse(listener, (l, e) -> {
-                    if (ExceptionsHelper.unwrapCause(e) instanceof EsRejectedExecutionException) {
-                        listener.onResponse(AuthenticationResult.terminate("server is too busy to respond", e));
-                    } else {
-                        listener.onFailure(e);
-                    }
-                }));
-                return;
-            }
-        }
-
-        final GetRequest getRequest = client
-            .prepareGet(SECURITY_MAIN_ALIAS, docId)
-            .setFetchSource(true)
-            .request();
-        final SecurityCaches.CacheItemsConsumer<CachedApiKeyDoc> cacheItemsConsumer = apiKeyDocCache.preparePut();
-        executeAsyncWithOrigin(ctx, SECURITY_ORIGIN, getRequest, ActionListener.<GetResponse>wrap(response -> {
-                if (response.isExists()) {
-                    final ApiKeyDoc apiKeyDoc;
-                    try (XContentParser parser = XContentHelper.createParser(
-                        NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE,
-                        response.getSourceAsBytesRef(), XContentType.JSON)) {
-                        apiKeyDoc = ApiKeyDoc.fromXContent(parser);
-                    }
-                    final CachedApiKeyDoc cachedApiKeyDoc = apiKeyDoc.toCachedApiKeyDoc();
-                    cacheItemsConsumer.consume(docId, cachedApiKeyDoc, () -> {
-                        roleDescriptorsBytesCache.computeIfAbsent(cachedApiKeyDoc.roleDescriptorsHash,
-                            k -> apiKeyDoc.roleDescriptorsBytes);
-                        roleDescriptorsBytesCache.computeIfAbsent(cachedApiKeyDoc.limitedByRoleDescriptorsHash,
-                            k -> apiKeyDoc.limitedByRoleDescriptorsBytes);
-                    });
+        final ActionListener<ApiKeyDoc> apiKeyDocActionListener = ActionListener.<ApiKeyDoc>wrap(apiKeyDoc -> {
                     validateApiKeyCredentials(docId, apiKeyDoc, credentials, clock, ActionListener.delegateResponse(listener, (l, e) -> {
                         if (ExceptionsHelper.unwrapCause(e) instanceof EsRejectedExecutionException) {
                             listener.onResponse(AuthenticationResult.terminate("server is too busy to respond", e));
@@ -413,20 +400,64 @@ public class ApiKeyService {
                             listener.onFailure(e);
                         }
                     }));
-                } else {
-                    listener.onResponse(
-                        AuthenticationResult.unsuccessful("unable to find apikey with id " + credentials.getId(), null));
                 }
-            },
-            e -> {
+            , e -> {
                 if (ExceptionsHelper.unwrapCause(e) instanceof EsRejectedExecutionException) {
                     listener.onResponse(AuthenticationResult.terminate("server is too busy to respond", e));
                 } else {
-                    listener.onResponse(AuthenticationResult.unsuccessful(
-                        "apikey authentication for id " + credentials.getId() + " encountered a failure",e));
+                    listener.onResponse(AuthenticationResult.unsuccessful("apikey authentication for id " + credentials.getId() + " encountered a failure",
+                        e));
                 }
-            }),
-            client::get);
+            });
+
+        final BiConsumer<String, ActionListener<ApiKeyDoc>> getter = (k, l) -> {
+            final GetRequest getRequest = client.prepareGet(SECURITY_MAIN_ALIAS, docId).setFetchSource(true).request();
+            executeAsyncWithOrigin(ctx, SECURITY_ORIGIN, getRequest, ActionListener.<GetResponse>wrap(response -> {
+                if (response.isExists()) {
+                    final ApiKeyDoc apiKeyDoc;
+                    try (
+                        XContentParser parser = XContentHelper.createParser(NamedXContentRegistry.EMPTY,
+                            LoggingDeprecationHandler.INSTANCE,
+                            response.getSourceAsBytesRef(),
+                            XContentType.JSON)) {
+                        apiKeyDoc = ApiKeyDoc.fromXContent(parser);
+                    }
+                    l.onResponse(apiKeyDoc);
+                    validateApiKeyCredentials(docId, apiKeyDoc, credentials, clock, ActionListener.delegateResponse(listener, (l2, e) -> {
+                        if (ExceptionsHelper.unwrapCause(e) instanceof EsRejectedExecutionException) {
+                            listener.onResponse(AuthenticationResult.terminate("server is too busy to respond", e));
+                        } else {
+                            listener.onFailure(e);
+                        }
+                    }));
+                } else {
+                    l.onFailure(null); // TODO: does this return a null value back?
+                    listener.onResponse(AuthenticationResult.unsuccessful("unable to find apikey with id " + credentials.getId(), null));
+                }
+            }, e -> {
+                if (ExceptionsHelper.unwrapCause(e) instanceof EsRejectedExecutionException) {
+                    listener.onResponse(AuthenticationResult.terminate("server is too busy to respond", e));
+                } else {
+                    listener.onResponse(AuthenticationResult.unsuccessful("apikey authentication for id " + credentials.getId() + " encountered a failure",
+                        e));
+                }
+            }), client::get);
+        };
+        final CachedApiKeyDoc cachedApiKeyDoc = apiKeyDocCache.get(docId, getter);
+
+        BytesReference roleDescriptorsBytes;
+        BytesReference limitedByRoleDescriptorsBytes;
+        while (true) {
+            roleDescriptorsBytes = roleDescriptorsBytesCache.get(cachedApiKeyDoc.roleDescriptorsHash);
+            limitedByRoleDescriptorsBytes = roleDescriptorsBytesCache.get(cachedApiKeyDoc.limitedByRoleDescriptorsHash);
+            if (roleDescriptorsBytes != null && limitedByRoleDescriptorsBytes != null) {
+                break;
+            }
+            apiKeyDocCache.get(docId, getter);
+        }
+
+        // TODO: this is not working
+
     }
 
     /**

@@ -21,10 +21,11 @@ import java.util.Set;
  */
 public class IndicesAccessControl {
 
+
     public static final IndicesAccessControl ALLOW_ALL = new IndicesAccessControl(true, Collections.emptyMap());
-    public static final IndicesAccessControl ALLOW_NO_INDICES = new IndicesAccessControl(true,
-            Collections.singletonMap(IndicesAndAliasesResolverField.NO_INDEX_PLACEHOLDER,
-                    new IndicesAccessControl.IndexAccessControl(true, new FieldPermissions(), DocumentPermissions.allowAll())));
+    public static final IndicesAccessControl ALLOW_NO_INDICES = new IndicesAccessControl(true, Collections.singletonMap(
+        IndicesAndAliasesResolverField.NO_INDEX_PLACEHOLDER,
+        new IndicesAccessControl.IndexAccessControl(true, new FieldPermissions(), DocumentPermissions.allowAll())));
     public static final IndicesAccessControl DENIED = new IndicesAccessControl(false, Collections.emptyMap());
 
     private final boolean granted;
@@ -107,20 +108,15 @@ public class IndicesAccessControl {
             } else {
                 granted = false;
             }
-            FieldPermissions fieldPermissions = getFieldPermissions().limitFieldPermissions(
-                    limitedByIndexAccessControl.fieldPermissions);
-            DocumentPermissions documentPermissions = getDocumentPermissions()
-                    .limitDocumentPermissions(limitedByIndexAccessControl.getDocumentPermissions());
+            FieldPermissions fieldPermissions = getFieldPermissions().limitFieldPermissions(limitedByIndexAccessControl.fieldPermissions);
+            DocumentPermissions documentPermissions =
+                getDocumentPermissions().limitDocumentPermissions(limitedByIndexAccessControl.getDocumentPermissions());
             return new IndexAccessControl(granted, fieldPermissions, documentPermissions);
         }
 
         @Override
         public String toString() {
-            return "IndexAccessControl{" +
-                    "granted=" + granted +
-                    ", fieldPermissions=" + fieldPermissions +
-                    ", documentPermissions=" + documentPermissions +
-                    '}';
+            return "IndexAccessControl{" + "granted=" + granted + ", fieldPermissions=" + fieldPermissions + ", documentPermissions=" + documentPermissions + '}';
         }
     }
 
@@ -153,9 +149,6 @@ public class IndicesAccessControl {
 
     @Override
     public String toString() {
-        return "IndicesAccessControl{" +
-                "granted=" + granted +
-                ", indexPermissions=" + indexPermissions +
-                '}';
+        return "IndicesAccessControl{" + "granted=" + granted + ", indexPermissions=" + indexPermissions + '}';
     }
 }
