@@ -19,6 +19,7 @@
 
 package org.elasticsearch.http;
 
+import org.elasticsearch.RecordJFR;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -30,11 +31,13 @@ import org.elasticsearch.common.lease.Releasables;
 import org.elasticsearch.common.network.CloseableChannel;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.node.Node;
 import org.elasticsearch.rest.AbstractRestChannel;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestResponse;
 import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.threadpool.ThreadPool;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +64,7 @@ public class DefaultRestChannel extends AbstractRestChannel implements RestChann
     private final ThreadContext threadContext;
     private final HttpChannel httpChannel;
     private final CorsHandler corsHandler;
+    private final long startTime;
 
     @Nullable
     private final HttpTracer tracerLog;
@@ -76,6 +80,21 @@ public class DefaultRestChannel extends AbstractRestChannel implements RestChann
         this.threadContext = threadContext;
         this.corsHandler = corsHandler;
         this.tracerLog = tracerLog;
+        this.startTime = System.nanoTime();
+    }
+
+    DefaultRestChannel(HttpChannel httpChannel, HttpRequest httpRequest, RestRequest request, BigArrays bigArrays,
+                       HttpHandlingSettings settings, ThreadPool threadPool, CorsHandler corsHandler,
+                       @Nullable HttpTracer tracerLog) {
+        super(request, settings.getDetailedErrorsEnabled());
+        this.httpChannel = httpChannel;
+        this.httpRequest = httpRequest;
+        this.bigArrays = bigArrays;
+        this.settings = settings;
+        this.threadContext = threadPool.getThreadContext();
+        this.corsHandler = corsHandler;
+        this.tracerLog = tracerLog;
+        this.startTime = System.nanoTime();
     }
 
     @Override
@@ -139,9 +158,18 @@ public class DefaultRestChannel extends AbstractRestChannel implements RestChann
             }
 
             ActionListener<Void> listener = ActionListener.wrap(() -> Releasables.close(toClose));
+            if (opaque != null) {
+                final long duration = System.nanoTime() - startTime;
+                Node.restRecorder.recordValue(duration);
+                Node.authenticationRecorder.recordValue(RecordJFR.getAuthenticationDuration(opaque));
+                Node.authorizationRecorder.recordValue(RecordJFR.getAuthorizationDuration(opaque));
+            }
             httpChannel.sendResponse(httpResponse, listener);
             success = true;
         } finally {
+            if (opaque != null) {
+                RecordJFR.removeAuthDuration(opaque);
+            }
             if (success == false) {
                 Releasables.close(toClose);
             }
