@@ -68,6 +68,7 @@ import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.license.LicenseUtils;
 import org.elasticsearch.license.XPackLicenseState;
+import org.elasticsearch.node.Node;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.XPackSettings;
@@ -390,7 +391,7 @@ public class ApiKeyService {
     void loadApiKeyAndValidateCredentials(ThreadContext ctx, ApiKeyCredentials credentials,
                                           ActionListener<AuthenticationResult> listener) {
         final String docId = credentials.getId();
-
+        final long startTime = System.nanoTime();
         Consumer<ApiKeyDoc> validator = apiKeyDoc ->
             validateApiKeyCredentials(docId, apiKeyDoc, credentials, clock, ActionListener.delegateResponse(listener, (l, e) -> {
                 if (ExceptionsHelper.unwrapCause(e) instanceof EsRejectedExecutionException) {
@@ -404,6 +405,7 @@ public class ApiKeyService {
         if (apiKeyDocCache != null) {
             ApiKeyDoc existing = apiKeyDocCache.get(docId);
             if (existing != null) {
+                Node.getApiKeyDocRecorder.recordValue(System.nanoTime() - startTime);
                 validator.accept(existing);
                 return;
             }
@@ -418,13 +420,16 @@ public class ApiKeyService {
             .setFetchSource(true)
             .request();
         executeAsyncWithOrigin(ctx, SECURITY_ORIGIN, getRequest, ActionListener.<GetResponse>wrap(response -> {
+                Node.getApiKeyDocRecorder.recordValue(System.nanoTime() - startTime);
                 if (response.isExists()) {
+                    final long startTime1 = System.nanoTime();
                     final ApiKeyDoc apiKeyDoc;
                     try (XContentParser parser = XContentHelper.createParser(
                         NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE,
                         response.getSourceAsBytesRef(), XContentType.JSON)) {
                         apiKeyDoc = ApiKeyDoc.fromXContent(parser);
                     }
+                    Node.getSourceRecorder.recordValue(System.nanoTime() - startTime1);
                     if (invalidationCount != -1) {
                         apiKeyDocCache.putIfNoInvalidationSince(docId, apiKeyDoc, invalidationCount);
                     }
@@ -717,7 +722,10 @@ public class ApiKeyService {
             Hasher hasher = Hasher.resolveFromHash(apiKeyHash.toCharArray());
             final char[] apiKeyHashChars = apiKeyHash.toCharArray();
             try {
-                return hasher.verify(credentials.getKey(), apiKeyHashChars);
+                final long startTime = System.nanoTime();
+                final boolean verified = hasher.verify(credentials.getKey(), apiKeyHashChars);
+                Node.docHasherRecorder.recordValue(System.nanoTime() - startTime);
+                return verified;
             } finally {
                 Arrays.fill(apiKeyHashChars, (char) 0);
             }
@@ -1112,7 +1120,10 @@ public class ApiKeyService {
         }
 
         private boolean verify(SecureString password) {
-            return hash != null && cacheHasher.verify(password, hash);
+            final long startTime = System.nanoTime();
+            final boolean verified = hash != null && cacheHasher.verify(password, hash);
+            Node.cacheHasherRecorder.recordValue(System.nanoTime() - startTime);
+            return verified;
         }
     }
 

@@ -38,7 +38,10 @@ import org.elasticsearch.xpack.security.authz.AuthorizationService;
 import org.elasticsearch.xpack.security.authz.AuthorizationUtils;
 
 import java.io.IOException;
+import java.util.function.BiConsumer;
 import java.util.function.Predicate;
+
+import static org.elasticsearch.xpack.core.security.SecurityHelper.getAuthRecorder;
 
 public class SecurityActionFilter implements ActionFilter {
 
@@ -153,9 +156,11 @@ public class SecurityActionFilter implements ActionFilter {
          here if a request is not associated with any other user.
          */
         final String securityAction = actionMapper.action(action, request);
+        final BiConsumer<Logger, String> authenticateRecorder = getAuthRecorder(threadContext, true);
         authcService.authenticate(securityAction, request, SystemUser.INSTANCE,
                 ActionListener.wrap((authc) -> {
                     if (authc != null) {
+                        authenticateRecorder.accept(logger, securityAction);
                         authorizeRequest(authc, securityAction, request, listener);
                     } else if (licenseState.isSecurityEnabled() == false) {
                         listener.onResponse(null);
@@ -170,8 +175,13 @@ public class SecurityActionFilter implements ActionFilter {
         if (authentication == null) {
             listener.onFailure(new IllegalArgumentException("authentication must be non null for authorization"));
         } else {
-            authzService.authorize(authentication, securityAction, request, ActionListener.wrap(ignore -> listener.onResponse(null),
-                listener::onFailure));
+            final BiConsumer<Logger, String> authorizeRecorder = getAuthRecorder(threadContext, false);
+            final ActionListener<Void> wrappedListener = ActionListener.wrap((e) -> {
+                authorizeRecorder.accept(logger, securityAction);
+                listener.onResponse(e);
+            }, listener::onFailure);
+            authzService.authorize(authentication, securityAction, request, ActionListener.wrap(ignore -> wrappedListener.onResponse(null),
+                wrappedListener::onFailure));
         }
     }
 }
