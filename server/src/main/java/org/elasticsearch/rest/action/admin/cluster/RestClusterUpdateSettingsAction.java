@@ -22,6 +22,8 @@ package org.elasticsearch.rest.action.admin.cluster;
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
 import org.elasticsearch.client.Requests;
 import org.elasticsearch.client.node.NodeClient;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.rest.BaseRestHandler;
@@ -31,7 +33,10 @@ import org.elasticsearch.rest.action.RestToXContentListener;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.elasticsearch.rest.RestRequest.Method.PUT;
 
@@ -39,6 +44,12 @@ public class RestClusterUpdateSettingsAction extends BaseRestHandler {
 
     private static final String PERSISTENT = "persistent";
     private static final String TRANSIENT = "transient";
+
+    private final ClusterSettings clusterSettings;
+
+    public RestClusterUpdateSettingsAction(ClusterSettings clusterSettings) {
+        this.clusterSettings = clusterSettings;
+    }
 
     @Override
     public List<Route> routes() {
@@ -66,6 +77,12 @@ public class RestClusterUpdateSettingsAction extends BaseRestHandler {
         if (source.containsKey(PERSISTENT)) {
             clusterUpdateSettingsRequest.persistentSettings((Map) source.get(PERSISTENT));
         }
+
+        clusterUpdateSettingsRequest.operatorOnlySettingNames(
+            Stream.concat(clusterUpdateSettingsRequest.transientSettings().keySet().stream(),
+                clusterUpdateSettingsRequest.persistentSettings().keySet().stream())
+            .filter(k -> Objects.requireNonNull(clusterSettings.get(k)).isOperator())
+            .collect(Collectors.toSet()));
 
         return channel -> client.admin().cluster().updateSettings(clusterUpdateSettingsRequest, new RestToXContentListener<>(channel));
     }

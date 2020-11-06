@@ -69,4 +69,12 @@ public abstract class TransportRequest extends TransportMessage implements TaskA
     public void writeTo(StreamOutput out) throws IOException {
         parentTaskId.writeTo(out);
     }
+
+    public boolean isOperatorOnly() {
+        return false;
+    }
+
+    public String operatorMessage() {
+        return null;
+    }
 }

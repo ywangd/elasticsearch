@@ -47,6 +47,7 @@ import org.elasticsearch.xpack.core.security.action.user.HasPrivilegesResponse;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.Authentication.AuthenticationType;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationFailureHandler;
+import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
 import org.elasticsearch.xpack.core.security.authc.esnative.ClientReservedRealm;
 import org.elasticsearch.xpack.core.security.authz.AuthorizationEngine;
 import org.elasticsearch.xpack.core.security.authz.AuthorizationEngine.AsyncSupplier;
@@ -170,6 +171,18 @@ public class AuthorizationService {
      */
     public void authorize(final Authentication authentication, final String action, final TransportRequest originalRequest,
                           final ActionListener<Void> listener) throws ElasticsearchSecurityException {
+
+        if (originalRequest.isOperatorOnly()) {
+            if (false == AuthenticationField.OPERATOR_VALUE.equals(threadContext.getHeader(AuthenticationField.OPERATOR_KEY))) {
+                String message = String.format("Operator privileges required for action [%s]", action);
+                if (originalRequest.operatorMessage() != null) {
+                    message += " with parameter [" + originalRequest.operatorMessage() + "]";
+                }
+                listener.onFailure(new ElasticsearchSecurityException(message));
+                return;
+            }
+        }
+
         /* authorization fills in certain transient headers, which must be observed in the listener (action handler execution)
          * as well, but which must not bleed across different action context (eg parent-child action contexts).
          * <p>

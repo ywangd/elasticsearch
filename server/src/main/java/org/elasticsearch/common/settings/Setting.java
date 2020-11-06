@@ -138,7 +138,9 @@ public class Setting<T> implements ToXContentObject {
         /**
          * Indicates an index-level setting that is privately managed. Such a setting can not even be set on index creation.
          */
-        PrivateIndex
+        PrivateIndex,
+
+        Operator
     }
 
     private final Key key;
@@ -295,6 +297,10 @@ public class Setting<T> implements ToXContentObject {
      */
     public final boolean isDynamic() {
         return properties.contains(Property.Dynamic);
+    }
+
+    public final boolean isOperator() {
+        return properties.contains(Property.Operator);
     }
 
     /**

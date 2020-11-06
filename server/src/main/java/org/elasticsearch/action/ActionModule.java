@@ -652,7 +652,7 @@ public class ActionModule extends AbstractModule {
         registerHandler.accept(new RestClusterStatsAction());
         registerHandler.accept(new RestClusterStateAction(settingsFilter));
         registerHandler.accept(new RestClusterHealthAction());
-        registerHandler.accept(new RestClusterUpdateSettingsAction());
+        registerHandler.accept(new RestClusterUpdateSettingsAction(clusterSettings));
         registerHandler.accept(new RestClusterGetSettingsAction(settings, clusterSettings, settingsFilter));
         registerHandler.accept(new RestClusterRerouteAction(settingsFilter));
         registerHandler.accept(new RestClusterSearchShardsAction());

@@ -195,4 +195,9 @@ public class AddVotingConfigExclusionsRequest extends MasterNodeRequest<AddVotin
             "timeout=" + timeout +
             '}';
     }
+
+    @Override
+    public boolean isOperatorOnly() {
+        return true;
+    }
 }

@@ -97,4 +97,9 @@ public class ClearVotingConfigExclusionsRequest extends MasterNodeRequest<ClearV
             ", timeout=" + timeout +
             '}';
     }
+
+    @Override
+    public boolean isOperatorOnly() {
+        return true;
+    }
 }

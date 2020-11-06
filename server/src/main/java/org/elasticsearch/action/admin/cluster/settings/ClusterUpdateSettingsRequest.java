@@ -19,6 +19,7 @@
 
 package org.elasticsearch.action.admin.cluster.settings;
 
+import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.support.master.AcknowledgedRequest;
 import org.elasticsearch.common.ParseField;
@@ -33,6 +34,7 @@ import org.elasticsearch.common.xcontent.XContentType;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Set;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
 import static org.elasticsearch.common.settings.Settings.readSettingsFromStream;
@@ -47,8 +49,8 @@ public class ClusterUpdateSettingsRequest extends AcknowledgedRequest<ClusterUpd
     private static final ParseField PERSISTENT = new ParseField("persistent");
     private static final ParseField TRANSIENT = new ParseField("transient");
 
-    private static final ObjectParser<ClusterUpdateSettingsRequest, Void> PARSER = new ObjectParser<>("cluster_update_settings_request",
-            false, ClusterUpdateSettingsRequest::new);
+    private static final ObjectParser<ClusterUpdateSettingsRequest, Void> PARSER =
+        new ObjectParser<>("cluster_update_settings_request", false, ClusterUpdateSettingsRequest::new);
 
     static {
         PARSER.declareObject((r, p) -> r.persistentSettings = p, (p, c) -> Settings.fromXContent(p), PERSISTENT);
@@ -57,11 +59,15 @@ public class ClusterUpdateSettingsRequest extends AcknowledgedRequest<ClusterUpd
 
     private Settings transientSettings = EMPTY_SETTINGS;
     private Settings persistentSettings = EMPTY_SETTINGS;
+    private Set<String> operatorOnlySettingNames;
 
     public ClusterUpdateSettingsRequest(StreamInput in) throws IOException {
         super(in);
         transientSettings = readSettingsFromStream(in);
         persistentSettings = readSettingsFromStream(in);
+        if (in.getVersion().onOrAfter(Version.CURRENT)) {
+            operatorOnlySettingNames = Set.copyOf(in.readOptionalStringList());
+        }
     }
 
     public ClusterUpdateSettingsRequest() {
@@ -153,6 +159,9 @@ public class ClusterUpdateSettingsRequest extends AcknowledgedRequest<ClusterUpd
         super.writeTo(out);
         writeSettingsToStream(transientSettings, out);
         writeSettingsToStream(persistentSettings, out);
+        if (out.getVersion().onOrAfter(Version.CURRENT)) {
+            out.writeOptionalStringCollection(operatorOnlySettingNames);
+        }
     }
 
     @Override
@@ -166,6 +175,24 @@ public class ClusterUpdateSettingsRequest extends AcknowledgedRequest<ClusterUpd
         builder.endObject();
         builder.endObject();
         return builder;
+    }
+
+    public void operatorOnlySettingNames(Set<String> operatorOnlySettingNames) {
+        this.operatorOnlySettingNames = Set.copyOf(operatorOnlySettingNames);
+    }
+
+    @Override
+    public boolean isOperatorOnly() {
+        return operatorOnlySettingNames != null && operatorOnlySettingNames.isEmpty() == false;
+    }
+
+    @Override
+    public String operatorMessage() {
+        if (operatorOnlySettingNames == null || operatorOnlySettingNames.isEmpty()) {
+            return null;
+        } else {
+            return String.join(",", operatorOnlySettingNames);
+        }
     }
 
     public static ClusterUpdateSettingsRequest fromXContent(XContentParser parser) {

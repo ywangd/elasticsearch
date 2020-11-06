@@ -32,10 +32,12 @@ import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.Authentication.AuthenticationType;
 import org.elasticsearch.xpack.core.security.authc.Authentication.RealmRef;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationFailureHandler;
+import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationResult;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationServiceField;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationToken;
 import org.elasticsearch.xpack.core.security.authc.Realm;
+import org.elasticsearch.xpack.core.security.authc.file.FileRealmSettings;
 import org.elasticsearch.xpack.core.security.authc.support.AuthenticationContextSerializer;
 import org.elasticsearch.xpack.core.security.authz.AuthorizationEngine.EmptyAuthorizationInfo;
 import org.elasticsearch.xpack.core.security.support.Exceptions;
@@ -689,6 +691,13 @@ public class AuthenticationService {
             try {
                 authenticationSerializer.writeToContext(authentication, threadContext);
                 request.authenticationSuccess(authentication);
+                // TODO: let's make it simple and assume user "operator" from file realm is the operator
+                if (authentication.getUser().isRunAs() == false
+                    && "operator".equals(authentication.getUser().principal())
+                    && FileRealmSettings.TYPE.equals(authentication.getAuthenticatedBy().getType())) {
+                    threadContext.putHeader(AuthenticationField.OPERATOR_KEY, AuthenticationField.OPERATOR_VALUE);
+                }
+
             } catch (Exception e) {
                 action = () -> {
                     logger.debug(
