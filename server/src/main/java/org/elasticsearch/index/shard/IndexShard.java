@@ -1720,7 +1720,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     @Override
     public ShardLongFieldRange getTimestampMillisRange() {
-        assert isReadAllowed();
+        assert isReadAllowed() : "Read is not allowed for state: " + state.name();
 
         if (mapperService() == null) {
             return ShardLongFieldRange.UNKNOWN; // no mapper service, no idea if the field even exists
