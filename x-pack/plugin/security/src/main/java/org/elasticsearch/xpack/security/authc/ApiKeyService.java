@@ -261,7 +261,7 @@ public class ApiKeyService {
         final Version version = clusterService.state().nodes().getMinNodeVersion();
 
         try (XContentBuilder builder = newDocument(apiKey, request.getName(), authentication, roleDescriptorSet, created, expiration,
-            request.getRoleDescriptors(), version)) {
+            request.getRoleDescriptors(), version, request.getMetadata())) {
 
             final IndexRequest indexRequest =
                 client.prepareIndex(SECURITY_MAIN_ALIAS)
@@ -290,7 +290,7 @@ public class ApiKeyService {
      */
     XContentBuilder newDocument(SecureString apiKey, String name, Authentication authentication, Set<RoleDescriptor> userRoles,
                                         Instant created, Instant expiration, List<RoleDescriptor> keyRoles,
-                                        Version version) throws IOException {
+                                        Version version, @Nullable Map<String, Object> metadata) throws IOException {
         XContentBuilder builder = XContentFactory.jsonBuilder();
         builder.startObject()
             .field("doc_type", "api_key")
@@ -330,6 +330,7 @@ public class ApiKeyService {
 
         builder.field("name", name)
             .field("version", version.id)
+            .field("metadata_flat", metadata)
             .startObject("creator")
             .field("principal", authentication.getUser().principal())
             .field("full_name", authentication.getUser().fullName())
@@ -867,8 +868,10 @@ public class ApiKeyService {
                                 Boolean invalidated = (Boolean) source.get("api_key_invalidated");
                                 String username = (String) ((Map<String, Object>) source.get("creator")).get("principal");
                                 String realm = (String) ((Map<String, Object>) source.get("creator")).get("realm");
+                                Map<String, Object> metadata = (Map<String, Object>) source.get("metadata_flat");
                                 return new ApiKey(name, id, Instant.ofEpochMilli(creation),
-                                        (expiration != null) ? Instant.ofEpochMilli(expiration) : null, invalidated, username, realm);
+                                        (expiration != null) ? Instant.ofEpochMilli(expiration) : null, invalidated, username, realm,
+                                        metadata != null ? metadata : Map.of());
                             }));
         }
     }
