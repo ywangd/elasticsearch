@@ -39,6 +39,7 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.UUIDs;
+import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.cache.Cache;
 import org.elasticsearch.common.cache.CacheBuilder;
@@ -140,6 +141,7 @@ public class ApiKeyService {
     private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(ApiKeyService.class);
     public static final String API_KEY_ID_KEY = "_security_api_key_id";
     public static final String API_KEY_NAME_KEY = "_security_api_key_name";
+    public static final String API_KEY_METADATA_KEY = "_security_api_key_metadata";
     public static final String API_KEY_REALM_NAME = "_es_api_key";
     public static final String API_KEY_REALM_TYPE = "_es_api_key";
     public static final String API_KEY_CREATOR_REALM_NAME = "_security_api_key_creator_realm_name";
@@ -330,7 +332,7 @@ public class ApiKeyService {
 
         builder.field("name", name)
             .field("version", version.id)
-            .field("metadata_flat", metadata)
+            .field("metadata_flattened", metadata)
             .startObject("creator")
             .field("principal", authentication.getUser().principal())
             .field("full_name", authentication.getUser().fullName())
@@ -671,6 +673,7 @@ public class ApiKeyService {
             authResultMetadata.put(API_KEY_LIMITED_ROLE_DESCRIPTORS_KEY, apiKeyDoc.limitedByRoleDescriptorsBytes);
             authResultMetadata.put(API_KEY_ID_KEY, credentials.getId());
             authResultMetadata.put(API_KEY_NAME_KEY, apiKeyDoc.name);
+            authResultMetadata.put(API_KEY_METADATA_KEY, apiKeyDoc.name);
             listener.onResponse(AuthenticationResult.success(apiKeyUser, authResultMetadata));
         } else {
             listener.onResponse(AuthenticationResult.unsuccessful("api key is expired", null));
@@ -868,7 +871,7 @@ public class ApiKeyService {
                                 Boolean invalidated = (Boolean) source.get("api_key_invalidated");
                                 String username = (String) ((Map<String, Object>) source.get("creator")).get("principal");
                                 String realm = (String) ((Map<String, Object>) source.get("creator")).get("realm");
-                                Map<String, Object> metadata = (Map<String, Object>) source.get("metadata_flat");
+                                Map<String, Object> metadata = (Map<String, Object>) source.get("metadata_flattened");
                                 return new ApiKey(name, id, Instant.ofEpochMilli(creation),
                                         (expiration != null) ? Instant.ofEpochMilli(expiration) : null, invalidated, username, realm,
                                         metadata != null ? metadata : Map.of());
@@ -1118,6 +1121,7 @@ public class ApiKeyService {
 
     public static final class ApiKeyDoc {
 
+        private static final BytesReference NULL_BYTES = new BytesArray("null");
         static final InstantiatingObjectParser<ApiKeyDoc, Void> PARSER;
         static {
             InstantiatingObjectParser.Builder<ApiKeyDoc, Void> builder =
@@ -1133,6 +1137,7 @@ public class ApiKeyService {
             parserHelper.declareRawObject(builder, constructorArg(), new ParseField("role_descriptors"));
             parserHelper.declareRawObject(builder, constructorArg(), new ParseField("limited_by_role_descriptors"));
             builder.declareObject(constructorArg(), (p, c) -> p.map(), new ParseField("creator"));
+            parserHelper.declareRawObjectOrNull(builder, optionalConstructorArg(), new ParseField("metadata_flattened"));
             PARSER = builder.build();
         }
 
@@ -1147,6 +1152,8 @@ public class ApiKeyService {
         final BytesReference roleDescriptorsBytes;
         final BytesReference limitedByRoleDescriptorsBytes;
         final Map<String, Object> creator;
+        @Nullable
+        final BytesReference metadataFlattened;
 
         public ApiKeyDoc(
             String docType,
@@ -1158,7 +1165,8 @@ public class ApiKeyService {
             int version,
             BytesReference roleDescriptorsBytes,
             BytesReference limitedByRoleDescriptorsBytes,
-            Map<String, Object> creator) {
+            Map<String, Object> creator,
+            @Nullable BytesReference metadataFlattened) {
 
             this.docType = docType;
             this.creationTime = creationTime;
@@ -1170,6 +1178,7 @@ public class ApiKeyService {
             this.roleDescriptorsBytes = roleDescriptorsBytes;
             this.limitedByRoleDescriptorsBytes = limitedByRoleDescriptorsBytes;
             this.creator = creator;
+            this.metadataFlattened = NULL_BYTES.equals(metadataFlattened) ? null : metadataFlattened;
         }
 
         public CachedApiKeyDoc toCachedApiKeyDoc() {
@@ -1188,7 +1197,8 @@ public class ApiKeyService {
                 version,
                 creator,
                 roleDescriptorsHash,
-                limitedByRoleDescriptorsHash);
+                limitedByRoleDescriptorsHash,
+                metadataFlattened);
         }
 
         static ApiKeyDoc fromXContent(XContentParser parser) {
@@ -1211,6 +1221,8 @@ public class ApiKeyService {
         final Map<String, Object> creator;
         final String roleDescriptorsHash;
         final String limitedByRoleDescriptorsHash;
+        @Nullable
+        final BytesReference metadataFlattened;
 
         public CachedApiKeyDoc(
             long creationTime, long expirationTime,
@@ -1218,7 +1230,8 @@ public class ApiKeyService {
             String hash,
             String name, int version, Map<String, Object> creator,
             String roleDescriptorsHash,
-            String limitedByRoleDescriptorsHash) {
+            String limitedByRoleDescriptorsHash,
+            @Nullable BytesReference metadataFlattened) {
             this.creationTime = creationTime;
             this.expirationTime = expirationTime;
             this.invalidated = invalidated;
@@ -1228,6 +1241,7 @@ public class ApiKeyService {
             this.creator = creator;
             this.roleDescriptorsHash = roleDescriptorsHash;
             this.limitedByRoleDescriptorsHash = limitedByRoleDescriptorsHash;
+            this.metadataFlattened = metadataFlattened;
         }
 
         public ApiKeyDoc toApiKeyDoc(BytesReference roleDescriptorsBytes, BytesReference limitedByRoleDescriptorsBytes) {
@@ -1241,7 +1255,8 @@ public class ApiKeyService {
                 version,
                 roleDescriptorsBytes,
                 limitedByRoleDescriptorsBytes,
-                creator);
+                creator,
+                metadataFlattened);
         }
     }
 
