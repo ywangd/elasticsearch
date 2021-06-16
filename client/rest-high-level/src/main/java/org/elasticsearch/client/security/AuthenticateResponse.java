@@ -43,6 +43,8 @@ public final class AuthenticateResponse implements ToXContentObject {
     static final ParseField REALM_TYPE = new ParseField("type");
     static final ParseField AUTHENTICATION_TYPE = new ParseField("authentication_type");
     static final ParseField TOKEN = new ParseField("token");
+    static final ParseField TOKEN_NAME = new ParseField("name");
+    static final ParseField TOKEN_TYPE = new ParseField("type");
 
     @SuppressWarnings("unchecked")
     private static final ConstructingObjectParser<AuthenticateResponse, Void> PARSER = new ConstructingObjectParser<>(
@@ -50,12 +52,16 @@ public final class AuthenticateResponse implements ToXContentObject {
             a -> new AuthenticateResponse(
                 new User((String) a[0], ((List<String>) a[1]), (Map<String, Object>) a[2],
                 (String) a[3], (String) a[4]), (Boolean) a[5], (RealmInfo) a[6], (RealmInfo) a[7], (String) a[8],
-                (Map<String, Object>) a[9]));
+                (TokenInfo) a[9]));
     static {
         final ConstructingObjectParser<RealmInfo, Void> realmInfoParser = new ConstructingObjectParser<>("realm_info", true,
             a -> new RealmInfo((String) a[0], (String) a[1]));
         realmInfoParser.declareString(constructorArg(), REALM_NAME);
         realmInfoParser.declareString(constructorArg(), REALM_TYPE);
+        final ConstructingObjectParser<TokenInfo, Void> tokenInfoParser =
+            new ConstructingObjectParser<>("token_info", true, a -> new TokenInfo((String) a[0], (String) a[1]));
+        tokenInfoParser.declareStringOrNull(optionalConstructorArg(), TOKEN_NAME);
+        tokenInfoParser.declareString(constructorArg(), TOKEN_TYPE);
         PARSER.declareString(constructorArg(), USERNAME);
         PARSER.declareStringArray(constructorArg(), ROLES);
         PARSER.<Map<String, Object>>declareObject(constructorArg(), (parser, c) -> parser.map(), METADATA);
@@ -65,7 +71,7 @@ public final class AuthenticateResponse implements ToXContentObject {
         PARSER.declareObject(constructorArg(), realmInfoParser, AUTHENTICATION_REALM);
         PARSER.declareObject(constructorArg(), realmInfoParser, LOOKUP_REALM);
         PARSER.declareString(constructorArg(), AUTHENTICATION_TYPE);
-        PARSER.declareObjectOrNull(optionalConstructorArg(), (p, c) -> p.map(), Map.of(), TOKEN);
+        PARSER.declareObjectOrNull(optionalConstructorArg(), tokenInfoParser, null, TOKEN);
     }
 
     private final User user;
@@ -73,21 +79,21 @@ public final class AuthenticateResponse implements ToXContentObject {
     private final RealmInfo authenticationRealm;
     private final RealmInfo lookupRealm;
     private final String authenticationType;
-    private final Map<String, Object> token;
+    private final TokenInfo tokenInfo;
 
     public AuthenticateResponse(User user, boolean enabled, RealmInfo authenticationRealm,
                                 RealmInfo lookupRealm, String authenticationType) {
-        this(user, enabled, authenticationRealm, lookupRealm, authenticationType, Map.of());
+        this(user, enabled, authenticationRealm, lookupRealm, authenticationType, null);
     }
 
     public AuthenticateResponse(User user, boolean enabled, RealmInfo authenticationRealm,
-                                RealmInfo lookupRealm, String authenticationType, Map<String, Object> token) {
+                                RealmInfo lookupRealm, String authenticationType, TokenInfo tokenInfo) {
         this.user = user;
         this.enabled = enabled;
         this.authenticationRealm = authenticationRealm;
         this.lookupRealm = lookupRealm;
         this.authenticationType = authenticationType;
-        this.token = token == null ? Map.of() : Map.copyOf(token);
+        this.tokenInfo = tokenInfo;
     }
 
     /**
@@ -124,8 +130,8 @@ public final class AuthenticateResponse implements ToXContentObject {
         return authenticationType;
     }
 
-    public Map<String, Object> getToken() {
-        return token;
+    public TokenInfo getTokenInfo() {
+        return tokenInfo;
     }
 
     @Override
@@ -150,8 +156,11 @@ public final class AuthenticateResponse implements ToXContentObject {
         builder.field(AuthenticateResponse.REALM_TYPE.getPreferredName(), lookupRealm.getType());
         builder.endObject();
         builder.field(AuthenticateResponse.AUTHENTICATION_TYPE.getPreferredName(), authenticationType);
-        if (false == token.isEmpty()) {
-            builder.field(AuthenticateResponse.TOKEN.getPreferredName(), token);
+        if (tokenInfo != null) {
+            builder.startObject(AuthenticateResponse.TOKEN.getPreferredName());
+            builder.field(TOKEN_NAME.getPreferredName(), tokenInfo.getName());
+            builder.field(TOKEN_TYPE.getPreferredName(), tokenInfo.getType());
+            builder.endObject();
         }
         return builder.endObject();
     }
@@ -166,12 +175,12 @@ public final class AuthenticateResponse implements ToXContentObject {
             Objects.equals(authenticationRealm, that.authenticationRealm) &&
             Objects.equals(lookupRealm, that.lookupRealm) &&
             Objects.equals(authenticationType, that.authenticationType) &&
-            Objects.equals(token, that.token);
+            Objects.equals(tokenInfo, that.tokenInfo);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(user, enabled, authenticationRealm, lookupRealm, authenticationType, token);
+        return Objects.hash(user, enabled, authenticationRealm, lookupRealm, authenticationType, tokenInfo);
     }
 
     public static AuthenticateResponse fromXContent(XContentParser parser) throws IOException {
@@ -202,6 +211,39 @@ public final class AuthenticateResponse implements ToXContentObject {
             RealmInfo realmInfo = (RealmInfo) o;
             return Objects.equals(name, realmInfo.name) &&
                 Objects.equals(type, realmInfo.type);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(name, type);
+        }
+    }
+
+    public static class TokenInfo {
+        private final String name;
+        private final String type;
+
+        public TokenInfo(String name, String type) {
+            this.name = name;
+            this.type = type;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o)
+                return true;
+            if (o == null || getClass() != o.getClass())
+                return false;
+            TokenInfo tokenInfo = (TokenInfo) o;
+            return Objects.equals(name, tokenInfo.name) && Objects.equals(type, tokenInfo.type);
         }
 
         @Override

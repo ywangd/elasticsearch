@@ -117,6 +117,7 @@ public abstract class AbstractXContentTestCase<T extends ToXContent> extends EST
         public void test() throws IOException {
             for (int runs = 0; runs < numberOfTestRuns; runs++) {
                 XContentType xContentType = randomFrom(XContentType.values()).canonical();
+                xContentType = XContentType.JSON;
                 T testInstance = instanceSupplier.apply(xContentType);
                 BytesReference originalXContent = toXContent.apply(testInstance, xContentType);
                 BytesReference shuffledContent = insertRandomFieldsAndShuffle(originalXContent, xContentType, supportsUnknownFields,

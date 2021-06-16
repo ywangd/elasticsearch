@@ -131,7 +131,6 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
@@ -757,7 +756,7 @@ public class SecurityDocumentationIT extends ESRestHighLevelClientTestCase {
             final String lookupRealmName = response.getLookupRealm().getName(); // <5>
             final String lookupRealmType = response.getLookupRealm().getType(); // <6>
             final String authenticationType = response.getAuthenticationType(); // <7>
-            final Map<String, Object> tokenInfo = response.getToken(); // <8>
+            final AuthenticateResponse.TokenInfo tokenInfo = response.getTokenInfo(); // <8>
             //end::authenticate-response
 
             assertThat(user.getUsername(), is("test_user"));
@@ -771,7 +770,7 @@ public class SecurityDocumentationIT extends ESRestHighLevelClientTestCase {
             assertThat(lookupRealmName, is("default_file"));
             assertThat(lookupRealmType, is("file"));
             assertThat(authenticationType, is("realm"));
-            assertThat(tokenInfo, anEmptyMap());
+            assertThat(tokenInfo, nullValue());
         }
 
         {

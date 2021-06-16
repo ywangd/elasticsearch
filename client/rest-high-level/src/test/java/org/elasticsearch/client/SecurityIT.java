@@ -153,7 +153,7 @@ public class SecurityIT extends ESRestHighLevelClientTestCase {
             final String lookupRealmName = response.getLookupRealm().getName();
             final String lookupRealmType = response.getLookupRealm().getType();
             final String authenticationType = response.getAuthenticationType();
-            final Map<String, Object> token = response.getToken();
+            final AuthenticateResponse.TokenInfo tokenInfo = response.getTokenInfo();
 
             assertThat(user.getUsername(), is("elastic/fleet-server"));
             assertThat(user.getRoles(), empty());
@@ -166,7 +166,7 @@ public class SecurityIT extends ESRestHighLevelClientTestCase {
             assertThat(lookupRealmName, is("_service_account"));
             assertThat(lookupRealmType, is("_service_account"));
             assertThat(authenticationType, is("token"));
-            assertThat(token, equalTo(Map.of("name", "token1", "type", "_service_account_index")));
+            assertThat(tokenInfo, equalTo(new AuthenticateResponse.TokenInfo("token1", "_service_account_index")));
         }
     }
 
