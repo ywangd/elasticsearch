@@ -9,6 +9,7 @@ package org.elasticsearch.xpack.core.security.authz;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.transport.TransportRequest;
@@ -64,11 +65,11 @@ import java.util.Set;
  *         the request is a an index action. This method may be called multiple times for a single
  *         request as the request may be made up of sub-requests that also need to be authorized. The async supplier
  *         for resolved indices will invoke the
- *         {@link #loadAuthorizedIndices(RequestInfo, AuthorizationInfo, Map, ActionListener)} method
+ *         {@link #loadAuthorizedIndices(RequestInfo, AuthorizationInfo, Metadata, ActionListener)} method
  *         if it is used as part of the authorization process.</li>
  * </ol>
  * <br><p>
- * <em>NOTE:</em> the {@link #loadAuthorizedIndices(RequestInfo, AuthorizationInfo, Map, ActionListener)}
+ * <em>NOTE:</em> the {@link #loadAuthorizedIndices(RequestInfo, AuthorizationInfo, Metadata, ActionListener)}
  * method may be called prior to {@link #authorizeIndexAction(RequestInfo, AuthorizationInfo, AsyncSupplier, Map, ActionListener)}
  * in cases where wildcards need to be expanded.
  * </p><br>
@@ -143,12 +144,11 @@ public interface AuthorizationEngine {
      *                    and associated user(s)
      * @param authorizationInfo information needed from authorization that was previously retrieved
      *                          from {@link #resolveAuthorizationInfo(RequestInfo, ActionListener)}
-     * @param indicesLookup a map of a string name to the cluster metadata specific to that
-     *                            alias or index
+     * @param metadata cluster metadata
      * @param listener the listener to be notified of the authorization result
      */
     void loadAuthorizedIndices(RequestInfo requestInfo, AuthorizationInfo authorizationInfo,
-                               Map<String, IndexAbstraction> indicesLookup, ActionListener<Set<String>> listener);
+                               Metadata metadata, ActionListener<Set<String>> listener);
 
 
     /**

@@ -22,6 +22,7 @@ import org.elasticsearch.cluster.metadata.DataStreamTestHelper;
 import org.elasticsearch.cluster.metadata.DataStream;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.collect.MapBuilder;
@@ -1070,9 +1071,11 @@ public class RBACEngineTests extends ESTestCase {
             lookup.put(im.getIndex().getName(), new IndexAbstraction.Index(im, iads));
         }
 
+        final Metadata metadata = mock(Metadata.class);
+        when(metadata.getIndicesLookup()).thenReturn(lookup);
         SearchRequest request = new SearchRequest("*");
         Set<String> authorizedIndices =
-            RBACEngine.resolveAuthorizedIndicesFromRole(role, getRequestInfo(request, SearchAction.NAME), lookup);
+            RBACEngine.resolveAuthorizedIndicesFromRole(role, getRequestInfo(request, SearchAction.NAME), metadata);
         assertThat(authorizedIndices, hasItem(dataStreamName));
         assertThat(authorizedIndices, hasItems(backingIndices.stream()
             .map(im -> im.getIndex().getName()).collect(Collectors.toList()).toArray(Strings.EMPTY_ARRAY)));
@@ -1103,12 +1106,14 @@ public class RBACEngineTests extends ESTestCase {
             lookup.put(im.getIndex().getName(), new IndexAbstraction.Index(im, iads));
         }
 
+        final Metadata metadata = mock(Metadata.class);
+        when(metadata.getIndicesLookup()).thenReturn(lookup);
         PutMappingRequest request = new PutMappingRequest("*");
         request.source("{ \"properties\": { \"message\": { \"type\": \"text\" } } }",
                 XContentType.JSON
         );
         Set<String> authorizedIndices =
-                RBACEngine.resolveAuthorizedIndicesFromRole(role, getRequestInfo(request, PutMappingAction.NAME), lookup);
+                RBACEngine.resolveAuthorizedIndicesFromRole(role, getRequestInfo(request, PutMappingAction.NAME), metadata);
         assertThat(authorizedIndices.isEmpty(), is(true));
     }
 

@@ -1977,7 +1977,7 @@ public class IndicesAndAliasesResolverTests extends ESTestCase {
             new Authentication(user, new RealmRef("test", "indices-aliases-resolver-tests", "node"), null);
         rolesStore.getRoles(user, authentication, rolesListener);
         return RBACEngine.resolveAuthorizedIndicesFromRole(rolesListener.actionGet(), getRequestInfo(request, action),
-            metadata.getIndicesLookup());
+            metadata);
     }
 
     public static IndexMetadata.Builder indexBuilder(String index) {

@@ -10,6 +10,7 @@ package org.elasticsearch.example;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.xpack.core.security.action.user.GetUserPrivilegesRequest;
 import org.elasticsearch.xpack.core.security.action.user.GetUserPrivilegesResponse;
 import org.elasticsearch.xpack.core.security.action.user.GetUserPrivilegesResponse.Indices;
@@ -97,9 +98,9 @@ public class CustomAuthorizationEngine implements AuthorizationEngine {
 
     @Override
     public void loadAuthorizedIndices(RequestInfo requestInfo, AuthorizationInfo authorizationInfo,
-                                      Map<String, IndexAbstraction> indicesLookup, ActionListener<Set<String>> listener) {
+                                      Metadata metadata, ActionListener<Set<String>> listener) {
         if (isSuperuser(requestInfo.getAuthentication().getUser())) {
-            listener.onResponse(indicesLookup.keySet());
+            listener.onResponse(metadata.getIndicesLookup().keySet());
         } else {
             listener.onResponse(Collections.emptySet());
         }

@@ -9,6 +9,7 @@ package org.elasticsearch.xpack.core.security.authz.permission;
 
 import org.apache.lucene.util.automaton.Automaton;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authz.accesscontrol.IndicesAccessControl;
@@ -20,6 +21,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.Predicate;
 
 /**
@@ -28,11 +30,13 @@ import java.util.function.Predicate;
  * provided role.
  */
 public final class LimitedRole extends Role {
+    private final Role role;
     private final Role limitedBy;
 
-    LimitedRole(ClusterPermission cluster, IndicesPermission indices, ApplicationPermission application, RunAsPermission runAs,
-                Role limitedBy) {
-        super(Objects.requireNonNull(limitedBy, "limiting role is required").names(), cluster, indices, application, runAs);
+    LimitedRole(Role role, Role limitedBy) {
+        super(Objects.requireNonNull(limitedBy, "limiting role is required").names(),
+            role.cluster(), role.indices(), role.application(), role.runAs());
+        this.role = role;
         this.limitedBy = limitedBy;
     }
 
@@ -174,6 +178,29 @@ public final class LimitedRole extends Role {
         return super.checkRunAs(runAs) && limitedBy.checkRunAs(runAs);
     }
 
+    // Caching for authorized indices is delegated to the limitedBy role because LimitedRole is ephemeral.
+    // Since the same limitedBy role can be used by many LimitedRole, to avoid conflict,
+    // the cache key also includes the role as a member.
+    @Override
+    protected WeakHashMap<AuthorizedIndicesKey, AuthorizedIndicesValue> getAuthorizedIndicesCache() {
+        return limitedBy.getAuthorizedIndicesCache();
+    }
+
+    @Override
+    protected long getCurrentMetadataVersion() {
+        return limitedBy.getCurrentMetadataVersion();
+    }
+
+    @Override
+    protected boolean compareAndSetCurrentMetadataVersion(long expectedVersion, long newVersion) {
+        return limitedBy.compareAndSetCurrentMetadataVersion(expectedVersion, newVersion);
+    }
+
+    @Override
+    protected AuthorizedIndicesKey getAuthorizedIndicesKey(String action, Metadata metadata) {
+        return new AuthorizedIndicesKey(role, action, metadata.version());
+    }
+
     /**
      * Create a new role defined by given role and the limited role.
      *
@@ -183,6 +210,6 @@ public final class LimitedRole extends Role {
      */
     public static LimitedRole createLimitedRole(Role fromRole, Role limitedByRole) {
         Objects.requireNonNull(limitedByRole, "limited by role is required to create limited role");
-        return new LimitedRole(fromRole.cluster(), fromRole.indices(), fromRole.application(), fromRole.runAs(), limitedByRole);
+        return new LimitedRole(fromRole, limitedByRole);
     }
 }

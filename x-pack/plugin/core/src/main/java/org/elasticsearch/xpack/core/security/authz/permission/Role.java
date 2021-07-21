@@ -6,8 +6,12 @@
  */
 package org.elasticsearch.xpack.core.security.authz.permission;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.automaton.Automaton;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
+import org.elasticsearch.cluster.metadata.IndexMetadata;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.core.Tuple;
@@ -23,26 +27,37 @@ import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeRes
 import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.Privilege;
+import org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 
 public class Role {
 
     public static final Role EMPTY = Role.builder("__empty").build();
+    private static final Logger logger = LogManager.getLogger(Role.class);
+    private static final String ANY_ACTION_MARKER = "*";
 
     private final String[] names;
     private final ClusterPermission cluster;
     private final IndicesPermission indices;
     private final ApplicationPermission application;
     private final RunAsPermission runAs;
+    // Weak keys so the JVM is free to claim memories used by the potentially large values
+    // WeakHashMap does not have concurrency control but we don't really need it for this usage
+    private final WeakHashMap<AuthorizedIndicesKey, AuthorizedIndicesValue> authorizedIndicesCache = new WeakHashMap<>();
+    private final AtomicLong currentMetadataVersion = new AtomicLong(-1L);
 
     Role(String[] names, ClusterPermission cluster, IndicesPermission indices, ApplicationPermission application, RunAsPermission runAs) {
         this.names = names;
@@ -186,6 +201,80 @@ public class Role {
         return new IndicesAccessControl(granted, indexPermissions);
     }
 
+    public Set<String> computeAuthorizedIndices(String action, boolean includeDataStreams, Metadata metadata) {
+        // Clear if metadata version increases. Note this only works if the role is in active use.
+        final long currentVersion = getCurrentMetadataVersion();
+        final long newVersion = metadata.version();
+        if (currentVersion < newVersion) {
+            if (compareAndSetCurrentMetadataVersion(currentVersion, newVersion)) {
+                logger.info("Update version of authorized indices from [{}] to [{}]", currentVersion, newVersion);
+                // This is not thread safe, but we don't really need to care
+                if (false == getAuthorizedIndicesCache().isEmpty()) {
+                    logger.info("Clear authorized indices cache version for new version [{}]", newVersion);
+                    getAuthorizedIndicesCache().clear();
+                }
+            }
+        }
+
+        // If role is superuser, actual action does not matter. So we use a marker for space efficiency
+        final AuthorizedIndicesValue v = getAuthorizedIndicesCache().computeIfAbsent(
+            getAuthorizedIndicesKey(action, metadata),
+            k -> doComputeAuthorizedIndices(k, metadata));
+        return includeDataStreams ? v.indicesAndAliasesAndDatastreams : v.indicesAndAliases;
+    }
+
+    private AuthorizedIndicesValue doComputeAuthorizedIndices(AuthorizedIndicesKey key, Metadata metadata) {
+        logger.info(
+            "Authorized indices cache: size [{}], computing for: [{}@{}] [{}] with key [{}]",
+            getAuthorizedIndicesCache().size() + 1, getClass().getSimpleName(), System.identityHashCode(this),
+            Arrays.toString(names), key);
+
+        // No need to have predicate if role is superuser
+        // Better way for determine superuser equivalent role?
+        final Predicate<IndexAbstraction> predicate =
+            (this == ReservedRolesStore.SUPERUSER_ROLE) ? null : allowedIndicesMatcher(key.normalizedAction);
+        final SortedMap<String, IndexAbstraction> lookup = metadata.getIndicesLookup();
+        Set<String> indicesAndAliases = new HashSet<>();
+        Set<String> indicesAndAliasesAndDatastreams = new HashSet<>();
+        // TODO: can this be done smarter? I think there are usually more indices/aliases in the cluster then indices defined a roles?
+        for (IndexAbstraction indexAbstraction : lookup.values()) {
+            if (predicate == null || predicate.test(indexAbstraction)) {
+                indicesAndAliasesAndDatastreams.add(indexAbstraction.getName());
+                if (indexAbstraction.getType() == IndexAbstraction.Type.DATA_STREAM) {
+                    // add data stream and its backing indices for any authorized data streams
+                    for (IndexMetadata indexMetadata : indexAbstraction.getIndices()) {
+                        indicesAndAliasesAndDatastreams.add(indexMetadata.getIndex().getName());
+                    }
+                } else {
+                    indicesAndAliases.add(indexAbstraction.getName());
+                }
+            }
+        }
+        logger.info("Number of authorized indices: [{}], [{}] with datastreams",
+            indicesAndAliases.size(), indicesAndAliasesAndDatastreams.size());
+        // Cache two sets with or without datastreams since an indicesRequest would normally request the list with datastreams first
+        // and then request the list w/o datastreams when it fans out to the shards
+        return new AuthorizedIndicesValue(indicesAndAliases, indicesAndAliasesAndDatastreams);
+    }
+
+    protected WeakHashMap<AuthorizedIndicesKey, AuthorizedIndicesValue> getAuthorizedIndicesCache() {
+        return authorizedIndicesCache;
+    }
+
+    protected long getCurrentMetadataVersion() {
+        return currentMetadataVersion.get();
+    }
+
+    protected boolean compareAndSetCurrentMetadataVersion(long expectedVersion, long newVersion) {
+        return currentMetadataVersion.compareAndSet(expectedVersion, newVersion);
+    }
+
+    protected AuthorizedIndicesKey getAuthorizedIndicesKey(String action, Metadata metadata) {
+        // Metadata version also changes for things not related to the list of indices.
+        // For now we just use it as the best approximation
+        return new AuthorizedIndicesKey(this == ReservedRolesStore.SUPERUSER_ROLE ? ANY_ACTION_MARKER : action, metadata.version());
+    }
+
     public static class Builder {
 
         private final String[] names;
@@ -285,4 +374,61 @@ public class Role {
         }
     }
 
+    protected static class AuthorizedIndicesKey {
+        final Role role;
+        final String normalizedAction;
+        final long metadataVersion;
+
+        AuthorizedIndicesKey(String action, long metadataVersion) {
+            this(null, action, metadataVersion);
+        }
+
+        AuthorizedIndicesKey(Role role, String action, long metadataVersion) {
+            this.role = role;
+            // We don't really support granting specific sub actions. The builtin named privileges never do that
+            final int subActionMarkerIndex = action.indexOf("[");
+            this.normalizedAction = subActionMarkerIndex == -1 ? action : action.substring(0, subActionMarkerIndex);
+            this.metadataVersion = metadataVersion;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o)
+                return true;
+            if (o == null || getClass() != o.getClass())
+                return false;
+            AuthorizedIndicesKey that = (AuthorizedIndicesKey) o;
+            return metadataVersion == that.metadataVersion && Objects.equals(role, that.role) && Objects.equals(
+                normalizedAction,
+                that.normalizedAction);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(role, normalizedAction, metadataVersion);
+        }
+
+        @Override
+        public String toString() {
+            return "AuthorizedIndicesKey{" + "role="
+                + (role == null ? null : role.getClass().getSimpleName() + "@" + System.identityHashCode(role))
+                + ", normalizedAction='"
+                + normalizedAction + '\'' + ", metadataVersion=" + metadataVersion + '}';
+        }
+    }
+
+    protected static class AuthorizedIndicesValue {
+        final Set<String> indicesAndAliases;
+        final Set<String> indicesAndAliasesAndDatastreams;
+
+        private AuthorizedIndicesValue(Set<String> indicesAndAliases, Set<String> indicesAndAliasesAndDatastreams) {
+            this.indicesAndAliases = Set.copyOf(indicesAndAliases);
+            if (indicesAndAliases.size() == indicesAndAliasesAndDatastreams.size()) {
+                assert indicesAndAliases.equals(indicesAndAliasesAndDatastreams) : "two sets of indices must be identical";
+                this.indicesAndAliasesAndDatastreams = this.indicesAndAliases;
+            } else {
+                this.indicesAndAliasesAndDatastreams = Set.copyOf(indicesAndAliasesAndDatastreams);
+            }
+        }
+    }
 }
