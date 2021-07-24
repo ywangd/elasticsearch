@@ -1,0 +1,72 @@
+{
+  "metadata": {
+    "indices": {
+      "index": {
+        "state": "open",
+        "settings": {
+          "hidden": false
+        },
+        "aliases": [
+          "alias_indices",
+          "my-write-alias"
+        ],
+        "system": false
+      },
+      ".ds-ilm-history-5-2021.08.01-000001": {
+        "state": "open",
+        "settings": {
+          "hidden": "true"
+        },
+        "aliases": [],
+        "system": false
+      },
+      ".ds-my-data-stream-2021.08.01-000001": {
+        "state": "open",
+        "settings": {
+          "hidden": "true"
+        },
+        "aliases": [],
+        "system": false
+      },
+      ".security-7": {
+        "state": "open",
+        "settings": {
+          "hidden": false
+        },
+        "aliases": [
+          ".security"
+        ],
+        "system": true
+      }
+    },
+    "data_stream": {
+      "data_stream": {
+        "ilm-history-5": {
+          "indices": [
+            {
+              "index_name": ".ds-ilm-history-5-2021.08.01-000001"
+            }
+          ],
+          "hidden": true,
+          "system": false
+        },
+        "my-data-stream": {
+          "indices": [
+            {
+              "index_name": ".ds-my-data-stream-2021.08.01-000001"
+            }
+          ],
+          "hidden": false,
+          "system": false
+        }
+      },
+      "data_stream_aliases": {
+        "alias_data_streams": {
+          "data_streams": [
+            "my-data-stream"
+          ]
+        }
+      }
+    }
+  }
+}
