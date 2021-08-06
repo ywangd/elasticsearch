@@ -36,7 +36,9 @@ import org.elasticsearch.xpack.security.playground.actions.TransportSPClusterAct
 import org.elasticsearch.xpack.security.playground.metric.AuthorizationMetrics;
 import org.elasticsearch.xpack.security.playground.metric.InstrumentedMethod;
 import org.elasticsearch.xpack.security.playground.simulation.IndicesStatusProvider;
+import org.elasticsearch.xpack.security.playground.support.TextLikeStreamOutput;
 
+import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -75,6 +77,7 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
     private final boolean instrumentedRoleEnabled;
     private final boolean instrumentedRelevantInternalActionEnabled;
     private final boolean instrumentedIndicesAndAliasesResolverEnabled;
+    // bridge method for creating an instrumentedRole
     private final Method bridgeMethod;
 
     public InstrumentedAuthorizationEngine(Settings settings, ThreadContext threadContext) {
@@ -279,17 +282,39 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
             final int requestHash = System.identityHashCode(requestInfo.getRequest());
             final int authorizationIndex = threadContext.getResponseHeaders().get(X_SECURITY_AUTHORIZATION_COUNTER).size() - 1;
             final String username = securityContext.getAuthentication().getUser().principal();
-            logger.trace(
-                () -> new ParameterizedMessage(
-                    "[{}] ----->>> action [{}], request [{}@{}], xOpaqueId [{}], user [{}]",
-                    method,
-                    action,
-                    requestHash,
-                    authorizationIndex,
-                    xOpaqueId,
-                    username
-                )
-            );
+            logger.trace(() -> {
+                if (method == InstrumentedMethod.RESOLVE_AUTHORIZATION_INFO) {
+                    try (TextLikeStreamOutput out = new TextLikeStreamOutput()) {
+                        try {
+                            requestInfo.getRequest().writeTo(out);
+                        } catch (IOException e) {
+                            throw new ElasticsearchException(e);
+                        }
+                        return new ParameterizedMessage(
+                            "[{}] ----->>> action [{}], request [{}@{}], xOpaqueId [{}], user [{}], request-class [{}], body [{}]",
+                            method,
+                            action,
+                            requestHash,
+                            authorizationIndex,
+                            xOpaqueId,
+                            username,
+                            requestInfo.getRequest().getClass().getSimpleName(),
+                            out
+                        );
+                    }
+                } else {
+                    return new ParameterizedMessage(
+                        "[{}] ----->>> action [{}], request [{}@{}], xOpaqueId [{}], user [{}]",
+                        method,
+                        action,
+                        requestHash,
+                        authorizationIndex,
+                        xOpaqueId,
+                        username
+                    );
+                }
+            });
+
             final long startTime = System.nanoTime();
             return authorizationInfo -> {
                 final long elapsed = System.nanoTime() - startTime;
@@ -398,13 +423,11 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
             };
         };
 
-        return AccessController.doPrivileged((PrivilegedAction<AuthorizationInfo>) () -> {
-            try {
-                return (AuthorizationInfo) bridgeMethod.invoke(null, authorizationInfo, startMetricFunc);
-            } catch (IllegalAccessException | InvocationTargetException e) {
-                throw new ElasticsearchException(e);
-            }
-        });
+        try {
+            return (AuthorizationInfo) bridgeMethod.invoke(null, authorizationInfo, startMetricFunc);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new ElasticsearchException(e);
+        }
     }
 
     private void maybeInstrumentRelevantInternalAction() {

@@ -129,20 +129,36 @@ public class RestMetricProxyAction extends SPBaseRestHandler {
     ) throws IOException {
         final RestStatus restStatus = RestStatus.fromCode(clientResponse.getStatusLine().getStatusCode());
         final byte[] bytes = clientResponse.getEntity().getContent().readAllBytes();
-        final String originalResponseBody = new String(bytes, StandardCharsets.UTF_8).trim();
+        final String contentType = clientResponse.getHeader("Content-Type");
+        final BytesRestResponse bytesRestResponse;
+
         // TODO: better way for injecting metric data instead of string concat??
-        final StringBuilder sb = new StringBuilder(
-            originalResponseBody.length() == 0 ? "{" : originalResponseBody.substring(0, originalResponseBody.length() - 1)
-        );
-        if (originalResponseBody.length() > 2) {
-            sb.append(",");
+        if (contentType.startsWith("application/json")) {
+            final String originalResponseBody = new String(bytes, StandardCharsets.UTF_8).trim();
+            final StringBuilder sb = new StringBuilder(
+                originalResponseBody.length() == 0 ? "{" : originalResponseBody.substring(0, originalResponseBody.length() - 1)
+            );
+            if (originalResponseBody.length() > 2) {
+                sb.append(",");
+            }
+            sb.append("\"_metric\":");
+            // TODO: option to filter out internal users
+            response.toXContent(builder, restRequest);
+            sb.append(Strings.toString(builder));
+            sb.append("}\n");
+            bytesRestResponse = new BytesRestResponse(restStatus, contentType, sb.toString());
+        } else {
+            builder.close();
+            final XContentBuilder yamlXContentBuilder = XContentBuilder.builder(XContentType.YAML.xContent());
+            yamlXContentBuilder.startObject().field("_metric");
+            response.toXContent(yamlXContentBuilder, restRequest);
+            yamlXContentBuilder.endObject();
+            bytesRestResponse = new BytesRestResponse(
+                restStatus,
+                contentType,
+                new String(bytes, StandardCharsets.UTF_8) + Strings.toString(yamlXContentBuilder) + "\n"
+            );
         }
-        sb.append("\"_metric\":");
-        // TODO: option to filter out internal users
-        response.toXContent(builder, restRequest);
-        sb.append(Strings.toString(builder));
-        sb.append("}\n");
-        final BytesRestResponse bytesRestResponse = new BytesRestResponse(restStatus, "application/json", sb.toString());
         Stream.of(clientResponse.getHeaders()).forEach(header -> {
             if (false == "content-length".equals(header.getName().toLowerCase(Locale.ROOT))) {
                 bytesRestResponse.addHeader(header.getName(), header.getValue());
