@@ -144,12 +144,11 @@ API key information.
 // TESTRESPONSE[s/ui2lp2axTNmsyakw9tvNnw/$body.api_key/]
 <1> Unique `id` for this API key
 <2> Optional expiration in milliseconds for this API key
-<3> Generated API key
+<3> Generated API key credentials
 
 To use the generated API key, send a request with an `Authorization` header that
-contains an `ApiKey` prefix followed by the API key credentials. The credentials
-are a Base64-encoded string in UTF-8 format that you create by combining the
-`id` and `api_key` with a colon (`:`). For example:
+contains an `ApiKey` prefix followed by the API key credentials, i.e. value of
+the `api_key` field.
 
 [source,shell]
 ----

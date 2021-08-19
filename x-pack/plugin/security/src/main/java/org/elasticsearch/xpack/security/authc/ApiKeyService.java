@@ -100,6 +100,7 @@ import org.elasticsearch.xpack.security.support.SecurityIndexManager;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
@@ -293,8 +294,12 @@ public class ApiKeyService {
                                 final ListenableFuture<CachedApiKeyHashResult> listenableFuture = new ListenableFuture<>();
                                 listenableFuture.onResponse(new CachedApiKeyHashResult(true, apiKey));
                                 apiKeyAuthCache.put(request.getId(), listenableFuture);
+
                                 listener.onResponse(
-                                    new CreateApiKeyResponse(request.getName(), request.getId(), apiKey, expiration));
+                                    new CreateApiKeyResponse(request.getName(), request.getId(),
+                                        new SecureString(Base64.getEncoder().encodeToString(
+                                            (request.getId() + ":" + apiKey).getBytes(StandardCharsets.UTF_8)).toCharArray()),
+                                        expiration));
                             },
                             listener::onFailure))));
             } catch (IOException e) {
@@ -724,6 +729,7 @@ public class ApiKeyService {
             && header.length() > "ApiKey ".length()) {
             final byte[] decodedApiKeyCredBytes = Base64.getDecoder().decode(header.substring("ApiKey ".length()));
             char[] apiKeyCredChars = null;
+            char[] secretCandidate = null;
             try {
                 apiKeyCredChars = CharArrays.utf8BytesToChars(decodedApiKeyCredBytes);
                 int colonIndex = -1;
@@ -737,11 +743,44 @@ public class ApiKeyService {
                 if (colonIndex < 1) {
                     throw new IllegalArgumentException("invalid ApiKey value");
                 }
-                return new ApiKeyCredentials(new String(Arrays.copyOfRange(apiKeyCredChars, 0, colonIndex)),
-                    new SecureString(Arrays.copyOfRange(apiKeyCredChars, colonIndex + 1, apiKeyCredChars.length)));
+
+                final String id = new String(Arrays.copyOfRange(apiKeyCredChars, 0, colonIndex));
+                try {
+                    secretCandidate = CharArrays.utf8BytesToChars(Base64.getDecoder()
+                        .decode(new String(Arrays.copyOfRange(apiKeyCredChars, colonIndex + 1, apiKeyCredChars.length))));
+                } catch (Exception e) {
+                    // silently ignored
+                }
+
+                boolean hasRedundantId = true;
+                // Short circuit if the length is not enough for a redundant id or the redundant id is not followed by a colon
+                if (secretCandidate == null || secretCandidate.length <= colonIndex || secretCandidate[colonIndex] != ':') {
+                    hasRedundantId = false;
+                } else {
+                    for (int i = 0; i < colonIndex; i++) {
+                        if (apiKeyCredChars[i] != secretCandidate[i]) {
+                            hasRedundantId = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (hasRedundantId) {
+                    logger.trace("redundant API key ID found [{}]", id);
+                    return new ApiKeyCredentials(id,
+                        new SecureString(Arrays.copyOfRange(secretCandidate, colonIndex + 1, secretCandidate.length))
+                    );
+                } else {
+                    return new ApiKeyCredentials(id,
+                        new SecureString(Arrays.copyOfRange(apiKeyCredChars, colonIndex + 1, apiKeyCredChars.length)));
+                }
+
             } finally {
                 if (apiKeyCredChars != null) {
                     Arrays.fill(apiKeyCredChars, (char) 0);
+                }
+                if (secretCandidate != null) {
+                    Arrays.fill(secretCandidate, (char) 0);
                 }
             }
         }

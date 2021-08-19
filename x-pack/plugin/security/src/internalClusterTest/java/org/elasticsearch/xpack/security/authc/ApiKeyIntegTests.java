@@ -198,7 +198,8 @@ public class ApiKeyIntegTests extends SecurityIntegTestCase {
 
         // use the first ApiKey for authorized action
         final String base64ApiKeyKeyValue = Base64.getEncoder().encodeToString(
-            (response.getId() + ":" + response.getKey().toString()).getBytes(StandardCharsets.UTF_8));
+            (randomBoolean() ?
+                response.getKey().toString() : (response.getId() + ":" + response.getKey())).getBytes(StandardCharsets.UTF_8));
         // Assert that we can authenticate with the API KEY
         final RestHighLevelClient restClient = new TestRestHighLevelClient();
         AuthenticateResponse authResponse = restClient.security().authenticate(RequestOptions.DEFAULT.toBuilder().addHeader("Authorization",
@@ -344,7 +345,7 @@ public class ApiKeyIntegTests extends SecurityIntegTestCase {
 
         // Authentication with the first key should fail
         final String base64ApiKeyKeyValue = Base64.getEncoder().encodeToString(
-            (apiKey1.v1() + ":" + apiKey1.v2()).getBytes(StandardCharsets.UTF_8));
+            (randomBoolean() ? apiKey1.v2() : apiKey1.v1() + ":" + apiKey1.v2()).getBytes(StandardCharsets.UTF_8));
         ElasticsearchStatusException e = expectThrows(ElasticsearchStatusException.class,
             () -> new TestRestHighLevelClient().security()
                 .authenticate(RequestOptions.DEFAULT.toBuilder().addHeader("Authorization",
@@ -1152,7 +1153,9 @@ public class ApiKeyIntegTests extends SecurityIntegTestCase {
             .get();
         final String docId = createApiKeyResponse.getId();
         final String base64ApiKeyKeyValue = Base64.getEncoder().encodeToString(
-            (docId + ":" + createApiKeyResponse.getKey().toString()).getBytes(StandardCharsets.UTF_8));
+            (randomBoolean() ?
+                createApiKeyResponse.getKey().toString() : docId + ":" + createApiKeyResponse.getKey().toString())
+                .getBytes(StandardCharsets.UTF_8));
         AuthenticateResponse authResponse = new TestRestHighLevelClient().security()
             .authenticate(RequestOptions.DEFAULT.toBuilder().addHeader("Authorization",
                 "ApiKey " + base64ApiKeyKeyValue).build());

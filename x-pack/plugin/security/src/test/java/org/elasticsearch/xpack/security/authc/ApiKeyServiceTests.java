@@ -230,8 +230,8 @@ public class ApiKeyServiceTests extends ESTestCase {
         assertNull(ApiKeyService.getCredentialsFromHeader(threadContext));
 
         final String apiKeyAuthScheme = randomFrom("apikey", "apiKey", "ApiKey", "APikey", "APIKEY");
-        final String id = randomAlphaOfLength(12);
-        final String key = randomAlphaOfLength(16);
+        final String id = randomAlphaOfLengthBetween(1, 20);
+        final String key = randomAlphaOfLengthBetween(0, 22);
         String headerValue = apiKeyAuthScheme + " " + Base64.getEncoder().encodeToString((id + ":" + key).getBytes(StandardCharsets.UTF_8));
 
         try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {
@@ -257,6 +257,49 @@ public class ApiKeyServiceTests extends ESTestCase {
             IllegalArgumentException e =
                 expectThrows(IllegalArgumentException.class, () -> ApiKeyService.getCredentialsFromHeader(threadContext));
             assertEquals("invalid ApiKey value", e.getMessage());
+        }
+    }
+
+    public void testGetCredentialsFromHeaderWillAcceptRedundantId() {
+        ThreadContext threadContext = threadPool.getThreadContext();
+        final String id = randomAlphaOfLengthBetween(1, 20);
+        final String key = randomAlphaOfLengthBetween(0, 22);
+
+        try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {
+            String headerValue = "ApiKey " + Base64.getEncoder().encodeToString(
+                (id + ":" + id + ":" + key).getBytes(StandardCharsets.UTF_8));
+            threadContext.putHeader("Authorization", headerValue);
+            ApiKeyService.ApiKeyCredentials creds = ApiKeyService.getCredentialsFromHeader(threadContext);
+            assertNotNull(creds);
+            assertEquals(id, creds.getId());
+            assertEquals(key, creds.getKey().toString());
+        }
+
+        // If the second id is not followed by a colon, it is not considered as a redundant ID but part of the secret
+        try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {
+            final String separator = randomAlphaOfLength(1);
+            String headerValue = "ApiKey " + Base64.getEncoder().encodeToString(
+                (id + ":" + id + separator + key).getBytes(StandardCharsets.UTF_8));
+            threadContext.putHeader("Authorization", headerValue);
+            ApiKeyService.ApiKeyCredentials creds = ApiKeyService.getCredentialsFromHeader(threadContext);
+            assertNotNull(creds);
+            assertEquals(id, creds.getId());
+            assertEquals(id + separator + key, creds.getKey().toString());
+        }
+
+        // Mismatch of the redundant id
+        try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {
+            final int indexPermutation = randomIntBetween(0, id.length() - 1);
+            final String permutation = id.substring(0, indexPermutation)
+                + randomValueOtherThan(id.substring(indexPermutation, indexPermutation + 1), () -> randomAlphaOfLength(1))
+                + id.substring(indexPermutation + 1);
+            String headerValue = "ApiKey " + Base64.getEncoder().encodeToString(
+                (id + ":" + permutation + ":" + key).getBytes(StandardCharsets.UTF_8));
+            threadContext.putHeader("Authorization", headerValue);
+            ApiKeyService.ApiKeyCredentials creds = ApiKeyService.getCredentialsFromHeader(threadContext);
+            assertNotNull(creds);
+            assertEquals(id, creds.getId());
+            assertEquals(permutation + ":" + key, creds.getKey().toString());
         }
     }
 
