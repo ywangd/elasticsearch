@@ -67,6 +67,7 @@ public class InstantMetric implements Writeable, ToXContentObject {
             .stream()
             .sorted(Comparator.comparingLong(entry -> entry.getValue().startTime))
             .collect(Collectors.toUnmodifiableList());
+        builder.field("number_of_requests", entries.size());
         builder.startArray("requests");
         for (Map.Entry<String, InstantMetricMember> entry : entries) {
             final InstantMetricMember member = entry.getValue();

@@ -244,7 +244,7 @@ public class FileIndicesStatusProvider implements IndicesStatusProvider {
                 }
                 return dataStream.getIndices().stream();
             }).collect(Collectors.toUnmodifiableList());
-            final IndexAbstraction.DataStreamAlias dataStreamAlias = new IndexAbstraction.DataStreamAlias(
+            final IndexAbstraction.Alias dataStreamAlias = new IndexAbstraction.Alias(
                 new DataStreamAlias(entry.getKey(), List.of(entry.getValue()), entry.getValue()[0], null),
                 allBackingIndexMetadatas,
                 allBackingIndexMetadatas.get(0)

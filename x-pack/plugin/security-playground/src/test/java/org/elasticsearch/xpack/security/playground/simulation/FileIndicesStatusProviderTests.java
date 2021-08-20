@@ -78,12 +78,11 @@ public class FileIndicesStatusProviderTests extends ESTestCase {
         assertThat(indexAlias.getIndices().size(), equalTo(1));
         assertThat(indexAlias.getIndices().get(0), is(indexMetadata));
 
-        final IndexAbstraction.DataStreamAlias dataStreamAliasAbstraction = (IndexAbstraction.DataStreamAlias) indexAbstractions.get(
-            "alias_data_streams"
-        );
+        final IndexAbstraction.Alias dataStreamAliasAbstraction = (IndexAbstraction.Alias) indexAbstractions.get("alias_data_streams");
         assertThat(dataStreamAliasAbstraction.getIndices().size(), equalTo(1));
         assertThat(dataStreamAliasAbstraction.getIndices().get(0), is(backingIndexMetadata));
-        assertThat(dataStreamAliasAbstraction.getDataStreamAlias().getDataStreams(), equalTo(List.of("my-data-stream")));
+        assertThat(dataStreamAliasAbstraction.isDataStreamRelated(), is(true));
+        assertThat(dataStreamAliasAbstraction.getIndices(), equalTo(List.of(backingIndexMetadata)));
 
         assertThat(indexAbstractions.get("my-write-alias").getClass(), is(IndexAbstraction.Alias.class));
         assertThat(indexAbstractions.get("my-data-stream").getClass(), is(IndexAbstraction.DataStream.class));
