@@ -59,6 +59,7 @@ public class TransportGetMetricInstantAction extends TransportNodesAction<
             failures,
             clusterService.state().nodes().getMasterNode().getName(),
             clusterService.getNodeName(),
+            request.elapsed,
             System.nanoTime()
         );
     }

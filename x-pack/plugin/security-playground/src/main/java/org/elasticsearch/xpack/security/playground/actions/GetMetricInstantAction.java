@@ -26,7 +26,9 @@ import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.security.playground.metric.InstantMetric;
 
 import java.io.IOException;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class GetMetricInstantAction extends ActionType<GetMetricInstantAction.Response> {
 
@@ -40,21 +42,25 @@ public class GetMetricInstantAction extends ActionType<GetMetricInstantAction.Re
     public static class Request extends BaseNodesRequest<GetMetricInstantAction.Request> {
 
         final String xOpaqueId;
+        final long elapsed;
 
-        public Request(String xOpaqueId) {
+        public Request(String xOpaqueId, long elapsed) {
             super((String[]) null);
             this.xOpaqueId = xOpaqueId;
+            this.elapsed = elapsed;
         }
 
         public Request(StreamInput in) throws IOException {
             super(in);
             this.xOpaqueId = in.readString();
+            this.elapsed = in.readLong();
         }
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
             out.writeString(xOpaqueId);
+            out.writeLong(elapsed);
         }
     }
 
@@ -83,12 +89,14 @@ public class GetMetricInstantAction extends ActionType<GetMetricInstantAction.Re
         private final String masterNodeName;
         private final String localNodeName;
         private final long timestamp;
+        private final long elapsed;
 
         public Response(StreamInput in) throws IOException {
             super(in);
             this.masterNodeName = in.readString();
             this.localNodeName = in.readString();
             this.timestamp = in.readLong();
+            this.elapsed = in.readLong();
         }
 
         public Response(
@@ -97,12 +105,14 @@ public class GetMetricInstantAction extends ActionType<GetMetricInstantAction.Re
             List<FailedNodeException> failures,
             String masterNodeName,
             String localNodeName,
+            long elapsed,
             long timestamp
         ) {
             super(clusterName, nodes, failures);
             this.masterNodeName = masterNodeName;
             this.localNodeName = localNodeName;
             this.timestamp = timestamp;
+            this.elapsed = elapsed;
         }
 
         @Override
@@ -131,9 +141,10 @@ public class GetMetricInstantAction extends ActionType<GetMetricInstantAction.Re
             builder.field("cluster_name", getClusterName().value());
             builder.field("master_node_name", masterNodeName);
             builder.field("node_name", localNodeName);
+            builder.field("elapsed", elapsed);
             builder.field("timestamp", timestamp);
             builder.startObject("nodes");
-            for (GetMetricInstantAction.NodeResponse nodeResponse : getNodes()) {
+            for (GetMetricInstantAction.NodeResponse nodeResponse : getSortedNodes()) {
                 if (nodeResponse.metricValue != null) {
                     if (groupByNodeName) {
                         builder.startObject(nodeResponse.getNode().getName());
@@ -149,6 +160,10 @@ public class GetMetricInstantAction extends ActionType<GetMetricInstantAction.Re
             builder.endObject();
             builder.endObject();
             return builder;
+        }
+
+        private List<GetMetricInstantAction.NodeResponse> getSortedNodes() {
+            return getNodes().stream().sorted(Comparator.comparing(n -> n.getNode().getName())).collect(Collectors.toUnmodifiableList());
         }
 
         @Override

@@ -53,6 +53,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
+import static org.elasticsearch.xpack.security.playground.RestClientComponent.PROXY_CLIENT_SOCKET_TIMEOUT;
+
 public class SecurityPlaygroundPlugin extends Plugin implements ActionPlugin {
 
     public static final Setting<Boolean> INSTRUMENTED_ALL_ENABLED = Setting.boolSetting(
@@ -152,7 +154,8 @@ public class SecurityPlaygroundPlugin extends Plugin implements ActionPlugin {
             INSTRUMENTED_ALL_ENABLED,
             INSTRUMENTED_ROLE_ENABLED,
             INSTRUMENTED_RELEVANT_INTERNAL_ACTIONS_ENABLED,
-            INSTRUMENTED_INDICES_AND_ALIASES_RESOLVER_ENABLED
+            INSTRUMENTED_INDICES_AND_ALIASES_RESOLVER_ENABLED,
+            PROXY_CLIENT_SOCKET_TIMEOUT
         );
     }
 

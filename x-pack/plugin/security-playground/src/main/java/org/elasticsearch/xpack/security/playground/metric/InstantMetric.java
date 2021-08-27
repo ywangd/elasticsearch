@@ -75,6 +75,7 @@ public class InstantMetric implements Writeable, ToXContentObject {
                 .field("action", member.action)
                 .field("request_hash", member.requestHash)
                 .field("start_time", member.startTime)
+                .field("thread_name", member.threadName)
                 .field("index", member.authorizationIndex)
                 .field("username", member.username)
                 .field("metric")
@@ -136,6 +137,7 @@ public class InstantMetric implements Writeable, ToXContentObject {
         final String action;
         final int requestHash;
         final int authorizationIndex;
+        final String threadName;
         String username;
         long resolveAuthorizationInfoElapsed;
         long authorizeRunAsElapsed;
@@ -155,6 +157,7 @@ public class InstantMetric implements Writeable, ToXContentObject {
             this.action = action;
             this.requestHash = requestHash;
             this.authorizationIndex = authorizationIndex;
+            this.threadName = Thread.currentThread().getName();
         }
 
         public InstantMetricMember(StreamInput in) throws IOException {
@@ -162,6 +165,7 @@ public class InstantMetric implements Writeable, ToXContentObject {
             this.action = in.readString();
             this.requestHash = in.readVInt();
             this.authorizationIndex = in.readVInt();
+            this.threadName = in.readString();
             this.username = in.readString();
             this.resolveAuthorizationInfoElapsed = in.readLong();
             this.authorizeRunAsElapsed = in.readLong();
@@ -183,6 +187,7 @@ public class InstantMetric implements Writeable, ToXContentObject {
             out.writeString(action);
             out.writeVInt(requestHash);
             out.writeVInt(authorizationIndex);
+            out.writeString(threadName);
             out.writeString(username);
             out.writeLong(resolveAuthorizationInfoElapsed);
             out.writeLong(authorizeRunAsElapsed);

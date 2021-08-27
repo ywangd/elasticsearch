@@ -22,7 +22,9 @@ import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.security.playground.metric.HistogramMetric;
 
 import java.io.IOException;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class GetMetricHistogramAction extends ActionType<GetMetricHistogramAction.Response> {
 
@@ -150,8 +152,8 @@ public class GetMetricHistogramAction extends ActionType<GetMetricHistogramActio
                 builder.field("x_opaque_id", xOpaqueId);
             }
             builder.startObject("nodes");
-            for (NodeResponse nodeResponse : getNodes()) {
-                if (nodeResponse.getHistograms().isEmpty()) {
+            for (NodeResponse nodeResponse : getSortedNodes()) {
+                if (nodeResponse.histograms.isEmpty() || nodeResponse.histograms.stream().allMatch(HistogramMetric::isZero)) {
                     continue;
                 }
                 if (groupByNodeName) {
@@ -172,6 +174,10 @@ public class GetMetricHistogramAction extends ActionType<GetMetricHistogramActio
             }
             builder.endObject();
             return builder;
+        }
+
+        private List<NodeResponse> getSortedNodes() {
+            return getNodes().stream().sorted(Comparator.comparing(n -> n.getNode().getName())).collect(Collectors.toUnmodifiableList());
         }
     }
 

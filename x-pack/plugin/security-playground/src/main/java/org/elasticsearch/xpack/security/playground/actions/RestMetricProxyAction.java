@@ -13,6 +13,7 @@ import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
+import org.elasticsearch.client.ResponseListener;
 import org.elasticsearch.client.node.NodeClient;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.UUIDs;
@@ -37,7 +38,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import static org.elasticsearch.common.xcontent.ConstructingObjectParser.constructorArg;
@@ -72,25 +72,47 @@ public class RestMetricProxyAction extends SPBaseRestHandler {
     protected RestChannelConsumer innerPrepareRequest(RestRequest restRequest, NodeClient client) throws IOException {
         final String xOpaqueId = UUIDs.base64UUID();
         final Request clientRequest = convertToClientRequest(restRequest, xOpaqueId, generateTraceParent());
-        final AtomicReference<Response> clientResponse = new AtomicReference<>();
-        try {
-            clientResponse.set(restClientComponent.performRequest(clientRequest));
-        } catch (ResponseException e) {
-            clientResponse.set(e.getResponse());
-        }
 
-        return channel -> executeAsyncWithOrigin(
-            client,
-            SECURITY_ORIGIN,
-            GetMetricInstantAction.INSTANCE,
-            new GetMetricInstantAction.Request(xOpaqueId),
-            new RestBuilderListener<GetMetricInstantAction.Response>(channel) {
+        return channel -> {
+            final long startTime = System.nanoTime();
+            restClientComponent.performRequestAsync(clientRequest, new ResponseListener() {
                 @Override
-                public RestResponse buildResponse(GetMetricInstantAction.Response response, XContentBuilder builder) throws Exception {
-                    return convertToRestResponse(restRequest, clientResponse.get(), response, builder);
+                public void onSuccess(Response response) {
+                    gatherMetrics(response);
                 }
-            }
-        );
+
+                @Override
+                public void onFailure(Exception exception) {
+                    if (exception instanceof ResponseException) {
+                        gatherMetrics(((ResponseException) exception).getResponse());
+                    } else {
+                        try {
+                            channel.sendResponse(new BytesRestResponse(channel, exception));
+                        } catch (Exception inner) {
+                            inner.addSuppressed(exception);
+                            logger.error("failed to send failure response", inner);
+                        }
+                    }
+                }
+
+                private void gatherMetrics(Response clientResponse) {
+                    final long elapsed = System.nanoTime() - startTime;
+                    executeAsyncWithOrigin(
+                        client,
+                        SECURITY_ORIGIN,
+                        GetMetricInstantAction.INSTANCE,
+                        new GetMetricInstantAction.Request(xOpaqueId, elapsed),
+                        new RestBuilderListener<GetMetricInstantAction.Response>(channel) {
+                            @Override
+                            public RestResponse buildResponse(GetMetricInstantAction.Response response, XContentBuilder builder)
+                                throws Exception {
+                                return convertToRestResponse(restRequest, clientResponse, response, builder);
+                            }
+                        }
+                    );
+                }
+            });
+        };
     }
 
     private Request convertToClientRequest(RestRequest restRequest, String xOpaqueId, String traceparent) throws IOException {

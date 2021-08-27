@@ -17,12 +17,15 @@ import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.admin.cluster.node.info.NodeInfo;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.Response;
+import org.elasticsearch.client.ResponseListener;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.network.NetworkAddress;
+import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.http.HttpInfo;
 import org.elasticsearch.xpack.security.playground.actions.TransportSPClusterAction;
 
@@ -36,17 +39,29 @@ import javax.net.ssl.SSLContext;
 
 public class RestClientComponent extends AbstractLifecycleComponent {
 
+    public static final Setting<TimeValue> PROXY_CLIENT_SOCKET_TIMEOUT = Setting.timeSetting(
+        "xpack.security.playground.proxy_client.socket_timeout",
+        TimeValue.timeValueMinutes(5),
+        Setting.Property.NodeScope
+    );
+
     private static final Logger logger = LogManager.getLogger(RestClientComponent.class);
 
     private final boolean sslEnabled;
+    private final int socketTimeout;
     private volatile RestClient restClient;
 
     public RestClientComponent(Settings settings) {
         sslEnabled = settings.getAsBoolean("xpack.security.http.ssl.enabled", false);
+        socketTimeout = (int) PROXY_CLIENT_SOCKET_TIMEOUT.get(settings).getMillis();
     }
 
     public Response performRequest(Request request) throws IOException {
         return getRestClient().performRequest(request);
+    }
+
+    public void performRequestAsync(Request request, ResponseListener listener) throws IOException {
+        getRestClient().performRequestAsync(request, listener);
     }
 
     private RestClient getRestClient() {
@@ -79,6 +94,9 @@ public class RestClientComponent extends AbstractLifecycleComponent {
                     );
                     logger.trace("target host for rest client is [{}]", host);
                     RestClientBuilder builder = RestClient.builder(host);
+                    builder.setRequestConfigCallback(
+                        requestConfigBuilder -> requestConfigBuilder.setConnectTimeout(5000).setSocketTimeout(socketTimeout)
+                    );
                     if (sslEnabled) {
                         final SSLContext sslContext;
                         try {
