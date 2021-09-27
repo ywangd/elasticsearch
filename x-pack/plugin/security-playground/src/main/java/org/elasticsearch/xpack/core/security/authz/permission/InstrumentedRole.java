@@ -7,6 +7,9 @@
 
 package org.elasticsearch.xpack.core.security.authz.permission;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.apache.lucene.util.automaton.Automaton;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.transport.TransportRequest;
@@ -19,6 +22,8 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 public class InstrumentedRole extends Role {
+
+    private static final Logger logger = LogManager.getLogger(InstrumentedRole.class);
 
     private final Function<String, Runnable> startMetricFunc;
 
@@ -87,6 +92,12 @@ public class InstrumentedRole extends Role {
         FieldPermissionsCache fieldPermissionsCache
     ) {
         final Runnable stopMetric = startMetricFunc.apply("ROLE_AUTHORIZE");
+        logger.trace(
+            () -> new ParameterizedMessage(
+                "[ROLE_AUTHORIZE] computing IndicesAccessControl for [{}] names",
+                requestedIndicesOrAliases.size()
+            )
+        );
         try {
             return super.authorize(action, requestedIndicesOrAliases, aliasAndIndexLookup, fieldPermissionsCache);
         } finally {

@@ -73,6 +73,7 @@ public class InstantMetric implements Writeable, ToXContentObject {
             final InstantMetricMember member = entry.getValue();
             builder.startObject()
                 .field("action", member.action)
+                .field("originatingAction", member.originatingAction)
                 .field("request_hash", member.requestHash)
                 .field("start_time", member.startTime)
                 .field("thread_name", member.threadName)
@@ -138,6 +139,7 @@ public class InstantMetric implements Writeable, ToXContentObject {
         final int requestHash;
         final int authorizationIndex;
         final String threadName;
+        String originatingAction;
         String username;
         long resolveAuthorizationInfoElapsed;
         long authorizeRunAsElapsed;

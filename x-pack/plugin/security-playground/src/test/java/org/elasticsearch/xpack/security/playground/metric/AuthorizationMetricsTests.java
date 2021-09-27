@@ -83,6 +83,7 @@ public class AuthorizationMetricsTests extends ESTestCase {
                     xOpaqueId,
                     methods[i],
                     action,
+                    action,
                     requestHash,
                     authorizationIndex,
                     startTime,

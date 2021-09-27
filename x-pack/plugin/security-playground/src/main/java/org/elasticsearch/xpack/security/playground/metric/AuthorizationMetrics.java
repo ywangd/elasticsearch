@@ -64,6 +64,7 @@ public class AuthorizationMetrics {
         String xOpaqueId,
         InstrumentedMethod method,
         String action,
+        String originatingAction,
         int requestHash,
         int authorizationIndex,
         long startTime,
@@ -88,6 +89,14 @@ public class AuthorizationMetrics {
             member.username = username;
         }
         assert username.equals(member.username) : "username not the same for a single metricValueMember";
+        if (originatingAction != null) {
+            if (member.originatingAction == null) {
+                member.originatingAction = originatingAction;
+            }
+            assert originatingAction.equals(member.originatingAction) : "originatingAction not the same for a single metricValueMember";
+        } else {
+            assert member.originatingAction == null : "originatingAction not always null for a single metricValueMember";
+        }
 
         innerAddInstantMetric(member, method, elapsed);
     }

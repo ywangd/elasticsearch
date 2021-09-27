@@ -60,6 +60,8 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static org.elasticsearch.xpack.core.security.authz.AuthorizationServiceField.ORIGINATING_ACTION_KEY;
+
 public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
 
     private static final String X_SECURITY_AUTHORIZATION_COUNTER = "x-security-authorization-counter";
@@ -173,6 +175,9 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
         );
         final Consumer<AuthorizationInfo> stopMetric = maybeStartMetric(InstrumentedMethod.LOAD_AUTHORIZED_INDICES, requestInfo);
         getRbacEngine().loadAuthorizedIndices(requestInfo, authorizationInfo, finalAliasOrIndexLookup, ActionListener.wrap(names -> {
+            logger.trace(
+                () -> new ParameterizedMessage("[{}] resolved [{}] names", InstrumentedMethod.LOAD_AUTHORIZED_INDICES, names.size())
+            );
             stopMetric.accept(authorizationInfo);
             listener.onResponse(names);
         }, listener::onFailure));
@@ -221,6 +226,10 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
 
     private String getXOpaqueId() {
         return threadContext.getHeader(Task.X_OPAQUE_ID);
+    }
+
+    private String getOriginatingAction() {
+        return threadContext.getTransient(ORIGINATING_ACTION_KEY);
     }
 
     private boolean isInstantaneousMetric() {
@@ -279,6 +288,7 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
 
         if (isInstantaneousMetric()) {
             final String action = requestInfo.getAction();
+            final String originatingAction = getOriginatingAction();
             final int requestHash = System.identityHashCode(requestInfo.getRequest());
             final int authorizationIndex = threadContext.getResponseHeaders().get(X_SECURITY_AUTHORIZATION_COUNTER).size() - 1;
             final String username = securityContext.getAuthentication().getUser().principal();
@@ -291,9 +301,11 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
                             throw new ElasticsearchException(e);
                         }
                         return new ParameterizedMessage(
-                            "[{}] ----->>> action [{}], request [{}@{}], xOpaqueId [{}], user [{}], request-class [{}], body [{}]",
+                            "[{}] ----->>> action [{}], originatingAction [{}], request [{}@{}], "
+                                + "xOpaqueId [{}], user [{}], request-class [{}], body [{}]",
                             method,
                             action,
+                            originatingAction,
                             requestHash,
                             authorizationIndex,
                             xOpaqueId,
@@ -304,9 +316,10 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
                     }
                 } else {
                     return new ParameterizedMessage(
-                        "[{}] ----->>> action [{}], request [{}@{}], xOpaqueId [{}], user [{}]",
+                        "[{}] ----->>> action [{}], originatingAction [{}], request [{}@{}], xOpaqueId [{}], user [{}]",
                         method,
                         action,
+                        originatingAction,
                         requestHash,
                         authorizationIndex,
                         xOpaqueId,
@@ -324,6 +337,7 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
                     xOpaqueId,
                     method,
                     action,
+                    originatingAction,
                     requestHash,
                     authorizationIndex,
                     startTime,
