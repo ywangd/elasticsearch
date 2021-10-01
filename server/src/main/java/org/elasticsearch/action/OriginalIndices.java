@@ -25,6 +25,7 @@ public final class OriginalIndices implements IndicesRequest {
 
     private final String[] indices;
     private final IndicesOptions indicesOptions;
+    private String[] permissionSource;
 
     public OriginalIndices(IndicesRequest indicesRequest) {
         this(indicesRequest.indices(), indicesRequest.indicesOptions());
@@ -50,13 +51,21 @@ public final class OriginalIndices implements IndicesRequest {
         return true;
     }
 
+    public void setPermissionSource(String[] permissionSource) {
+        this.permissionSource = permissionSource;
+    }
+
     public static OriginalIndices readOriginalIndices(StreamInput in) throws IOException {
         return new OriginalIndices(in.readStringArray(), IndicesOptions.readIndicesOptions(in));
     }
 
     public static void writeOriginalIndices(OriginalIndices originalIndices, StreamOutput out) throws IOException {
         assert originalIndices != NONE;
-        out.writeStringArrayNullable(originalIndices.indices);
+        if (originalIndices.permissionSource != null) {
+            out.writeStringArrayNullable(originalIndices.permissionSource);
+        } else {
+            out.writeStringArrayNullable(originalIndices.indices);
+        }
         originalIndices.indicesOptions.writeIndicesOptions(out);
     }
 

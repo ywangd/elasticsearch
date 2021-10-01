@@ -355,6 +355,7 @@ public final class IndicesPermission {
         final Map<String, Set<FieldPermissions>> fieldPermissionsByIndex = new HashMap<>(totalResourceCount);
         final Map<String, DocumentLevelPermissions> roleQueriesByIndex = new HashMap<>(totalResourceCount);
         final Map<String, Boolean> grantedBuilder = new HashMap<>(totalResourceCount);
+        final Map<String, Set<String>> permissionSources = new HashMap<>(totalResourceCount);
 
         final boolean isMappingUpdateAction = isMappingUpdateAction(action);
 
@@ -448,8 +449,10 @@ public final class IndicesPermission {
             }
 
             grantedBuilder.put(resource.name, granted);
+            updatePermissionSources(permissionSources, resource, resource.name);
             for (String concreteIndex : concreteIndices) {
                 grantedBuilder.put(concreteIndex, granted);
+                updatePermissionSources(permissionSources, resource, concreteIndex);
             }
         }
 
@@ -473,9 +476,28 @@ public final class IndicesPermission {
                 fieldPermissions = FieldPermissions.DEFAULT;
             }
             indexPermissions.put(index, new IndicesAccessControl.IndexAccessControl(entry.getValue(), fieldPermissions,
-                    (roleQueries != null) ? DocumentPermissions.filteredBy(roleQueries) : DocumentPermissions.allowAll()));
+                    (roleQueries != null) ? DocumentPermissions.filteredBy(roleQueries) : DocumentPermissions.allowAll(),
+                permissionSources.get(index)));
         }
         return unmodifiableMap(indexPermissions);
+    }
+
+    private void updatePermissionSources(Map<String, Set<String>> permissionSources, IndexResource resource, String name) {
+        permissionSources.compute(name, (k, existingSet) -> {
+            if (existingSet == null) {
+                return Set.of(resource.name);
+            } else if (existingSet.size() == 1) {
+                if (existingSet.contains(resource.name)) {
+                    return existingSet;
+                }
+                final Set<String> hashSet = new HashSet<>(existingSet);
+                hashSet.add(resource.name);
+                return hashSet;
+            } else {
+                existingSet.add(resource.name);
+                return existingSet;
+            }
+        });
     }
 
     private boolean isConcreteRestrictedIndex(String indexPattern) {

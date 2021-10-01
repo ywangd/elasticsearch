@@ -78,6 +78,10 @@ public class FieldCapabilitiesIndexRequest extends ActionRequest implements Indi
         return originalIndices.indicesOptions();
     }
 
+    public OriginalIndices getOriginalIndices() {
+        return originalIndices;
+    }
+
     public String index() {
         return index;
     }

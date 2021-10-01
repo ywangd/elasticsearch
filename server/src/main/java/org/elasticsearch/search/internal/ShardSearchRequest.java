@@ -292,6 +292,10 @@ public class ShardSearchRequest extends TransportRequest implements IndicesReque
         return originalIndices.indicesOptions();
     }
 
+    public OriginalIndices getOriginalIndices() {
+        return originalIndices;
+    }
+
     public ShardId shardId() {
         return shardId;
     }

@@ -32,7 +32,8 @@ public class IndicesAccessControl {
     public static final IndicesAccessControl ALLOW_ALL = new IndicesAccessControl(true, Collections.emptyMap());
     public static final IndicesAccessControl ALLOW_NO_INDICES = new IndicesAccessControl(true,
             Collections.singletonMap(IndicesAndAliasesResolverField.NO_INDEX_PLACEHOLDER,
-                    new IndicesAccessControl.IndexAccessControl(true, new FieldPermissions(), DocumentPermissions.allowAll())));
+                    new IndicesAccessControl.IndexAccessControl(true, new FieldPermissions(), DocumentPermissions.allowAll(),
+                        Set.of())));
     public static final IndicesAccessControl DENIED = new IndicesAccessControl(false, Collections.emptyMap());
 
     private final boolean granted;
@@ -74,11 +75,18 @@ public class IndicesAccessControl {
         private final boolean granted;
         private final FieldPermissions fieldPermissions;
         private final DocumentPermissions documentPermissions;
+        private final Set<String> permissionSource;
 
         public IndexAccessControl(boolean granted, FieldPermissions fieldPermissions, DocumentPermissions documentPermissions) {
+            this(granted, fieldPermissions, documentPermissions, Set.of());
+        }
+
+        public IndexAccessControl(boolean granted, FieldPermissions fieldPermissions, DocumentPermissions documentPermissions,
+                                  Set<String> permissionSource) {
             this.granted = granted;
             this.fieldPermissions = (fieldPermissions == null) ? FieldPermissions.DEFAULT : fieldPermissions;
             this.documentPermissions = (documentPermissions == null) ? DocumentPermissions.allowAll() : documentPermissions;
+            this.permissionSource = permissionSource;
         }
 
         /**
@@ -104,6 +112,10 @@ public class IndicesAccessControl {
             return documentPermissions;
         }
 
+        public Set<String> getPermissionSource() {
+            return permissionSource;
+        }
+
         /**
          * Returns a instance of {@link IndexAccessControl}, where the privileges for {@code this} object are constrained by the privileges
          * contained in the provided parameter.<br>
@@ -116,6 +128,7 @@ public class IndicesAccessControl {
          * @see DocumentPermissions#limitDocumentPermissions(DocumentPermissions)
          */
         public IndexAccessControl limitIndexAccessControl(IndexAccessControl limitedByIndexAccessControl) {
+            assert permissionSource.equals(limitedByIndexAccessControl.permissionSource) : "permission source must be identical";
             final boolean granted;
             if (this.granted == limitedByIndexAccessControl.granted) {
                 granted = this.granted;
@@ -126,7 +139,7 @@ public class IndicesAccessControl {
                     limitedByIndexAccessControl.fieldPermissions);
             DocumentPermissions documentPermissions = getDocumentPermissions()
                     .limitDocumentPermissions(limitedByIndexAccessControl.getDocumentPermissions());
-            return new IndexAccessControl(granted, fieldPermissions, documentPermissions);
+            return new IndexAccessControl(granted, fieldPermissions, documentPermissions, permissionSource);
         }
 
         @Override
@@ -187,6 +200,7 @@ public class IndicesAccessControl {
         }
         Set<String> indexes = indexPermissions.keySet();
         Set<String> otherIndexes = limitedByIndicesAccessControl.indexPermissions.keySet();
+//        assert indexes.equals(otherIndexes) : "must be identical";
         Set<String> commonIndexes = Sets.intersection(indexes, otherIndexes);
 
         Map<String, IndexAccessControl> indexPermissions = new HashMap<>(commonIndexes.size());

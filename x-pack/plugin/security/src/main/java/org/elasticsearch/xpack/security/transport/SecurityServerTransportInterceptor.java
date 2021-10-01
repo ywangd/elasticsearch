@@ -10,6 +10,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.fieldcaps.FieldCapabilitiesIndexRequest;
 import org.elasticsearch.action.support.DestructiveOperations;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
@@ -18,6 +19,7 @@ import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 import org.elasticsearch.common.util.concurrent.RunOnce;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.gateway.GatewayService;
+import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.SendRequestTransportException;
@@ -33,6 +35,7 @@ import org.elasticsearch.transport.TransportService;
 import org.elasticsearch.transport.TransportService.ContextRestoreResponseHandler;
 import org.elasticsearch.xpack.core.XPackSettings;
 import org.elasticsearch.xpack.core.security.SecurityContext;
+import org.elasticsearch.xpack.core.security.authz.accesscontrol.IndicesAccessControl;
 import org.elasticsearch.xpack.core.security.transport.ProfileConfigurations;
 import org.elasticsearch.xpack.core.security.user.SystemUser;
 import org.elasticsearch.xpack.core.ssl.SSLService;
@@ -45,6 +48,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.elasticsearch.xpack.core.security.SecurityField.setting;
+import static org.elasticsearch.xpack.core.security.authz.AuthorizationServiceField.INDICES_PERMISSIONS_KEY;
 
 public class SecurityServerTransportInterceptor implements TransportInterceptor {
 
@@ -123,10 +127,26 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
         }
 
         try {
+            if (request instanceof FieldCapabilitiesIndexRequest) {
+                final FieldCapabilitiesIndexRequest fieldCapabilitiesIndexRequest = (FieldCapabilitiesIndexRequest) request;
+                fieldCapabilitiesIndexRequest.getOriginalIndices().setPermissionSource(
+                    getPermissionSource(fieldCapabilitiesIndexRequest.index()));
+            } else if (request instanceof ShardSearchRequest) {
+                final ShardSearchRequest shardSearchRequest = (ShardSearchRequest) request;
+                shardSearchRequest.getOriginalIndices().setPermissionSource(
+                    getPermissionSource(shardSearchRequest.shardId().getIndexName()));
+            }
             sender.sendRequest(connection, action, request, options, handler);
         } catch (Exception e) {
             handler.handleException(new SendRequestTransportException(connection.getNode(), action, e));
         }
+    }
+
+    private String[] getPermissionSource(String index) {
+        final IndicesAccessControl indicesAccessControl = securityContext.getThreadContext().getTransient(INDICES_PERMISSIONS_KEY);
+        final IndicesAccessControl.IndexAccessControl indexAccessControl =
+            indicesAccessControl.getIndexPermissions(index);
+        return indexAccessControl.getPermissionSource().toArray(String[]::new);
     }
 
     // pkg-private method to allow overriding for tests
