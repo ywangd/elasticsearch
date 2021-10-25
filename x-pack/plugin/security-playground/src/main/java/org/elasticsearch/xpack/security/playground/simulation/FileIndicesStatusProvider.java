@@ -21,16 +21,16 @@ import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.DeprecationHandler;
-import org.elasticsearch.common.xcontent.NamedXContentRegistry;
-import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.watcher.FileChangesListener;
 import org.elasticsearch.watcher.FileWatcher;
 import org.elasticsearch.watcher.ResourceWatcherService;
+import org.elasticsearch.xcontent.DeprecationHandler;
+import org.elasticsearch.xcontent.NamedXContentRegistry;
+import org.elasticsearch.xcontent.XContentParser;
+import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xpack.core.XPackPlugin;
 import org.elasticsearch.xpack.core.security.xcontent.XContentUtils;
 
@@ -56,8 +56,8 @@ import static org.elasticsearch.cluster.metadata.IndexMetadata.INDEX_NUMBER_OF_S
 import static org.elasticsearch.cluster.metadata.IndexMetadata.INDEX_ROUTING_PARTITION_SIZE_SETTING;
 import static org.elasticsearch.cluster.metadata.IndexMetadata.SETTING_INDEX_UUID;
 import static org.elasticsearch.cluster.metadata.IndexMetadata.SETTING_INDEX_VERSION_CREATED;
-import static org.elasticsearch.common.xcontent.XContentParser.Token;
 import static org.elasticsearch.common.xcontent.XContentParserUtils.ensureExpectedToken;
+import static org.elasticsearch.xcontent.XContentParser.Token;
 
 public class FileIndicesStatusProvider implements IndicesStatusProvider {
 
@@ -186,7 +186,7 @@ public class FileIndicesStatusProvider implements IndicesStatusProvider {
                     false,
                     dataStreamRecord.system
                 ),
-                List.copyOf(indexMetadatas)
+                indexMetadatas.stream().map(im -> im.getIndex().getName()).collect(Collectors.toUnmodifiableList())
             );
             // data stream
             indexAbstractionLookup.put(dataStreamRecord.name, dataStream);
@@ -194,7 +194,10 @@ public class FileIndicesStatusProvider implements IndicesStatusProvider {
             // data stream backing indices
             indexMetadatas.forEach(
                 indexMetadata -> {
-                    indexAbstractionLookup.put(indexMetadata.getIndex().getName(), new IndexAbstraction.Index(indexMetadata, dataStream));
+                    indexAbstractionLookup.put(
+                        indexMetadata.getIndex().getName(),
+                        new IndexAbstraction.ConcreteIndex(indexMetadata, dataStream)
+                    );
                 }
             );
         }
@@ -205,8 +208,8 @@ public class FileIndicesStatusProvider implements IndicesStatusProvider {
                 final IndexMetadata indexMetadata = buildIndexMetadata(indexRecord);
                 collectIndexAliases(indexAliases, indexMetadata);
                 // regular indices
-                indexAbstractionLookup.put(indexRecord.name, new IndexAbstraction.Index(indexMetadata));
-            } else if (false == index instanceof IndexAbstraction.Index) {
+                indexAbstractionLookup.put(indexRecord.name, new IndexAbstraction.ConcreteIndex(indexMetadata));
+            } else if (false == index instanceof IndexAbstraction.ConcreteIndex) {
                 throw new IllegalArgumentException(
                     "expect [" + indexRecord.name + "] to be an Index, but got [" + index.getClass().getSimpleName() + "]"
                 );
@@ -235,7 +238,7 @@ public class FileIndicesStatusProvider implements IndicesStatusProvider {
                 logger.info("skipping data stream alias name [{}] because it is taken by an index alias", entry.getKey());
                 continue;
             }
-            final List<IndexMetadata> allBackingIndexMetadatas = Arrays.stream(entry.getValue()).flatMap(dataStreamName -> {
+            final List<Index> allBackingIndices = Arrays.stream(entry.getValue()).flatMap(dataStreamName -> {
                 final IndexAbstraction dataStream = indexAbstractionLookup.get(dataStreamName);
                 if (false == dataStream instanceof IndexAbstraction.DataStream) {
                     throw new IllegalArgumentException(
@@ -246,8 +249,8 @@ public class FileIndicesStatusProvider implements IndicesStatusProvider {
             }).collect(Collectors.toUnmodifiableList());
             final IndexAbstraction.Alias dataStreamAlias = new IndexAbstraction.Alias(
                 new DataStreamAlias(entry.getKey(), List.of(entry.getValue()), entry.getValue()[0], null),
-                allBackingIndexMetadatas,
-                allBackingIndexMetadatas.get(0)
+                allBackingIndices,
+                allBackingIndices.get(0)
             );
             indexAbstractionLookup.put(entry.getKey(), dataStreamAlias);
         }

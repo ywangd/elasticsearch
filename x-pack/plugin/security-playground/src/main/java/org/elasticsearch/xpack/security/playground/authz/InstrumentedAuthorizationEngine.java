@@ -524,7 +524,8 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
                         SecurityPlaygroundPlugin.INDEX_NAME_EXPRESSION_RESOLVER_REF.get(),
                         startMetricFunc,
                         (BiFunction<String, Metadata, Metadata>) (action, metadata) -> {
-                            if (SPIndexAction.NAME.equals(action)) {
+                            // TODO: disable indices injection
+                            if (false && SPIndexAction.NAME.equals(action)) {
                                 final IndicesStatusProvider.IndicesStatus indicesStatus =
                                     TransportSPClusterAction.fileIndexAbstractionsProvider.get();
                                 if (indicesStatus != null) {

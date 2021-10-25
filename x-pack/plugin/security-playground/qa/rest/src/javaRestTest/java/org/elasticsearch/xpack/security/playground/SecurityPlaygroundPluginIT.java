@@ -28,16 +28,18 @@ public class SecurityPlaygroundPluginIT extends ESRestTestCase {
     @Before
     public void setUpTraceLogging() throws IOException {
         final Request request = new Request("PUT", "/_cluster/settings");
-        request.setJsonEntity("{\"transient\":"
-            + "{\"logger.org.elasticsearch.xpack.security.playground.authz.InstrumentedAuthorizationEngine\":\"TRACE\"}}");
+        request.setJsonEntity(
+            "{\"transient\":" + "{\"logger.org.elasticsearch.xpack.security.playground.authz.InstrumentedAuthorizationEngine\":\"TRACE\"}}"
+        );
         assertOK(adminClient().performRequest(request));
     }
 
     @After
     public void tearDownTraceLogging() throws IOException {
         final Request request = new Request("PUT", "/_cluster/settings");
-        request.setJsonEntity("{\"transient\":"
-            + "{\"logger.org.elasticsearch.xpack.security.playground.authz.InstrumentedAuthorizationEngine\":null}}");
+        request.setJsonEntity(
+            "{\"transient\":" + "{\"logger.org.elasticsearch.xpack.security.playground.authz.InstrumentedAuthorizationEngine\":null}}"
+        );
         assertOK(adminClient().performRequest(request));
     }
 
@@ -154,7 +156,8 @@ public class SecurityPlaygroundPluginIT extends ESRestTestCase {
                     (Map<String, Integer>) metricMap.get("authorize_run_as"),
                     (Map<String, Integer>) metricMap.get("authorize_cluster_action"),
                     (Map<String, Integer>) metricMap.get("authorize_index_action"),
-                    (Map<String, Integer>) metricMap.get("load_authorized_indices"));
+                    (Map<String, Integer>) metricMap.get("load_authorized_indices")
+                );
             }
             if (localNodeName.equals(entry.getKey())) {
                 metrics.local = metric;
@@ -192,7 +195,8 @@ public class SecurityPlaygroundPluginIT extends ESRestTestCase {
             Map<String, Integer> authorizeRunAs,
             Map<String, Integer> authorizeClusterAction,
             Map<String, Integer> authorizeIndexAction,
-            Map<String, Integer> loadAuthorizedIndices) {
+            Map<String, Integer> loadAuthorizedIndices
+        ) {
             this.resolveAuthorizationInfo = resolveAuthorizationInfo;
             this.authorizeRunAs = authorizeRunAs;
             this.authorizeClusterAction = authorizeClusterAction;

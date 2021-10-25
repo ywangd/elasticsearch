@@ -37,33 +37,33 @@ public interface IndicesStatusProvider extends Supplier<IndicesStatusProvider.In
             final List<String> allClosedIndices = new ArrayList<>();
             final List<String> visibleClosedIndices = new ArrayList<>();
             final ImmutableOpenMap.Builder<String, IndexMetadata> indexLookupBuilder = new ImmutableOpenMap.Builder<>();
-            indexAbstractionLookup.values()
-                .stream()
-                .filter(indexAbstraction -> indexAbstraction.getType() == IndexAbstraction.Type.CONCRETE_INDEX)
-                .map(indexAbstraction -> indexAbstraction.getIndices().get(0))
-                .forEach(indexMetadata -> {
-                    final String indexName = indexMetadata.getIndex().getName();
-                    indexLookupBuilder.put(indexName, indexMetadata);
-                    allIndices.add(indexName);
-                    final boolean visible = false == IndexMetadata.INDEX_HIDDEN_SETTING.get(indexMetadata.getSettings());
-
-                    if (visible) {
-                        visibleIndices.add(indexName);
-
-                    }
-
-                    if (indexMetadata.getState() == IndexMetadata.State.OPEN) {
-                        allOpenIndices.add(indexName);
-                        if (visible) {
-                            visibleOpenIndices.add(indexName);
-                        }
-                    } else if (indexMetadata.getState() == IndexMetadata.State.CLOSE) {
-                        allClosedIndices.add(indexName);
-                        if (visible) {
-                            visibleClosedIndices.add(indexName);
-                        }
-                    }
-                });
+            // indexAbstractionLookup.values()
+            // .stream()
+            // .filter(indexAbstraction -> indexAbstraction.getType() == IndexAbstraction.Type.CONCRETE_INDEX)
+            // .map(indexAbstraction -> indexAbstraction.getIndices().get(0))
+            // .forEach(indexMetadata -> {
+            // final String indexName = indexMetadata.getName();
+            // indexLookupBuilder.put(indexName, indexMetadata);
+            // allIndices.add(indexName);
+            // final boolean visible = false == IndexMetadata.INDEX_HIDDEN_SETTING.get(indexMetadata.getSettings());
+            //
+            // if (visible) {
+            // visibleIndices.add(indexName);
+            //
+            // }
+            //
+            // if (indexMetadata.getState() == IndexMetadata.State.OPEN) {
+            // allOpenIndices.add(indexName);
+            // if (visible) {
+            // visibleOpenIndices.add(indexName);
+            // }
+            // } else if (indexMetadata.getState() == IndexMetadata.State.CLOSE) {
+            // allClosedIndices.add(indexName);
+            // if (visible) {
+            // visibleClosedIndices.add(indexName);
+            // }
+            // }
+            // });
             this.indexLookup = indexLookupBuilder.build();
             this.allIndices = allIndices.toArray(String[]::new);
             this.visibleIndices = visibleIndices.toArray(String[]::new);
