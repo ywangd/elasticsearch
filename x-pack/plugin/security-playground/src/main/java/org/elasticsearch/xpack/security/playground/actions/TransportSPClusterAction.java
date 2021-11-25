@@ -16,14 +16,12 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 import org.elasticsearch.xpack.security.authz.AuthorizationService;
 import org.elasticsearch.xpack.security.authz.store.CompositeRolesStore;
-import org.elasticsearch.xpack.security.playground.simulation.FileIndicesStatusProvider;
 
 public class TransportSPClusterAction extends HandledTransportAction<SPClusterAction.Request, SPClusterAction.Response> {
 
     public static CompositeRolesStore compositeRolesStore;
     public static NodeService nodeService;
     public static AuthorizationService authorizationService;
-    public static FileIndicesStatusProvider fileIndexAbstractionsProvider;
 
     @Inject
     public TransportSPClusterAction(
@@ -31,14 +29,12 @@ public class TransportSPClusterAction extends HandledTransportAction<SPClusterAc
         ActionFilters actionFilters,
         CompositeRolesStore compositeRolesStore,
         NodeService nodeService,
-        AuthorizationService authorizationService,
-        FileIndicesStatusProvider fileIndexAbstractionsProvider
+        AuthorizationService authorizationService
     ) {
         super(SPClusterAction.NAME, transportService, actionFilters, in -> SPClusterAction.Request.INSTANCE);
         TransportSPClusterAction.compositeRolesStore = compositeRolesStore;
         TransportSPClusterAction.nodeService = nodeService;
         TransportSPClusterAction.authorizationService = authorizationService;
-        TransportSPClusterAction.fileIndexAbstractionsProvider = fileIndexAbstractionsProvider;
     }
 
     @Override

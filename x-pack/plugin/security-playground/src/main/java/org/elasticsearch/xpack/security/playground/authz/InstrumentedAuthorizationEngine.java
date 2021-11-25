@@ -31,11 +31,9 @@ import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivileg
 import org.elasticsearch.xpack.security.authz.AuthorizationService;
 import org.elasticsearch.xpack.security.authz.RBACEngine;
 import org.elasticsearch.xpack.security.playground.SecurityPlaygroundPlugin;
-import org.elasticsearch.xpack.security.playground.actions.SPIndexAction;
 import org.elasticsearch.xpack.security.playground.actions.TransportSPClusterAction;
 import org.elasticsearch.xpack.security.playground.metric.AuthorizationMetrics;
 import org.elasticsearch.xpack.security.playground.metric.InstrumentedMethod;
-import org.elasticsearch.xpack.security.playground.simulation.IndicesStatusProvider;
 import org.elasticsearch.xpack.security.playground.support.TextLikeStreamOutput;
 
 import java.io.IOException;
@@ -145,16 +143,12 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
         Map<String, IndexAbstraction> aliasOrIndexLookup,
         ActionListener<IndexAuthorizationResult> listener
     ) {
-        final Map<String, IndexAbstraction> finalAliasOrIndexLookup = maybeSimulateIndexAbstractions(
-            requestInfo.getAction(),
-            aliasOrIndexLookup
-        );
         final Consumer<AuthorizationInfo> stopMetric = maybeStartMetric(InstrumentedMethod.AUTHORIZE_INDEX_ACTION, requestInfo);
         getRbacEngine().authorizeIndexAction(
             requestInfo,
             authorizationInfo,
             indicesAsyncSupplier,
-            finalAliasOrIndexLookup,
+            aliasOrIndexLookup,
             ActionListener.wrap(indexAuthorizationResult -> {
                 stopMetric.accept(authorizationInfo);
                 listener.onResponse(indexAuthorizationResult);
@@ -169,12 +163,8 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
         Map<String, IndexAbstraction> indicesLookup,
         ActionListener<Set<String>> listener
     ) {
-        final Map<String, IndexAbstraction> finalAliasOrIndexLookup = maybeSimulateIndexAbstractions(
-            requestInfo.getAction(),
-            indicesLookup
-        );
         final Consumer<AuthorizationInfo> stopMetric = maybeStartMetric(InstrumentedMethod.LOAD_AUTHORIZED_INDICES, requestInfo);
-        getRbacEngine().loadAuthorizedIndices(requestInfo, authorizationInfo, finalAliasOrIndexLookup, ActionListener.wrap(names -> {
+        getRbacEngine().loadAuthorizedIndices(requestInfo, authorizationInfo, indicesLookup, ActionListener.wrap(names -> {
             logger.trace(
                 () -> new ParameterizedMessage("[{}] resolved [{}] names", InstrumentedMethod.LOAD_AUTHORIZED_INDICES, names.size())
             );
@@ -523,39 +513,7 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
                         SecurityPlaygroundPlugin.CLUSTER_SERVICE_REF.get(),
                         SecurityPlaygroundPlugin.INDEX_NAME_EXPRESSION_RESOLVER_REF.get(),
                         startMetricFunc,
-                        (BiFunction<String, Metadata, Metadata>) (action, metadata) -> {
-                            // TODO: disable indices injection
-                            if (false && SPIndexAction.NAME.equals(action)) {
-                                final IndicesStatusProvider.IndicesStatus indicesStatus =
-                                    TransportSPClusterAction.fileIndexAbstractionsProvider.get();
-                                if (indicesStatus != null) {
-                                    try {
-                                        return (Metadata) metadataConstructor.newInstance(
-                                            metadata.clusterUUID(),
-                                            metadata.clusterUUIDCommitted(),
-                                            metadata.version(),
-                                            metadata.coordinationMetadata(),
-                                            metadata.transientSettings(),
-                                            metadata.persistentSettings(),
-                                            metadata.hashesOfConsistentSettings(),
-                                            indicesStatus.indexLookup,
-                                            metadata.templates(),
-                                            metadata.customs(),
-                                            indicesStatus.allIndices,
-                                            indicesStatus.visibleIndices,
-                                            indicesStatus.allOpenIndices,
-                                            indicesStatus.visibleOpenIndices,
-                                            indicesStatus.allClosedIndices,
-                                            indicesStatus.visibleClosedIndices,
-                                            indicesStatus.indexAbstractionLookup
-                                        );
-                                    } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
-                                        throw new ElasticsearchException(e);
-                                    }
-                                }
-                            }
-                            return metadata;
-                        }
+                        (BiFunction<String, Metadata, Metadata>) (action, metadata) -> metadata
                     );
                     final Field indicesAndAliasesResolverField = AuthorizationService.class.getDeclaredField("indicesAndAliasesResolver");
                     indicesAndAliasesResolverField.setAccessible(true);
@@ -567,23 +525,5 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
                 }
             });
         }
-    }
-
-    // TODO: two calls of this method may get different results
-    private Map<String, IndexAbstraction> maybeSimulateIndexAbstractions(String action, Map<String, IndexAbstraction> indexAbstractions) {
-        Map<String, IndexAbstraction> finalAliasOrIndexLookup = null;
-        if (SPIndexAction.NAME.equals(action)) {
-            final IndicesStatusProvider.IndicesStatus indicesStatus = TransportSPClusterAction.fileIndexAbstractionsProvider.get();
-            if (indicesStatus != null) {
-                finalAliasOrIndexLookup = indicesStatus.indexAbstractionLookup;
-            }
-        }
-
-        if (finalAliasOrIndexLookup == null) {
-            finalAliasOrIndexLookup = indexAbstractions;
-        }
-
-        // TODO: merge real and simulated lookups?
-        return finalAliasOrIndexLookup;
     }
 }

@@ -45,7 +45,6 @@ import org.elasticsearch.xpack.security.playground.actions.TransportGetMetricHis
 import org.elasticsearch.xpack.security.playground.actions.TransportGetMetricInstantAction;
 import org.elasticsearch.xpack.security.playground.actions.TransportSPClusterAction;
 import org.elasticsearch.xpack.security.playground.actions.TransportSPIndexAction;
-import org.elasticsearch.xpack.security.playground.simulation.FileIndicesStatusProvider;
 
 import java.nio.file.Path;
 import java.util.Collection;
@@ -111,7 +110,7 @@ public class SecurityPlaygroundPlugin extends Plugin implements ActionPlugin {
         }
         CLUSTER_SERVICE_REF.set(clusterService);
         INDEX_NAME_EXPRESSION_RESOLVER_REF.set(indexNameExpressionResolver);
-        return List.of(restClientComponent, new FileIndicesStatusProvider(environment, resourceWatcherService));
+        return List.of(restClientComponent);
     }
 
     @Override
