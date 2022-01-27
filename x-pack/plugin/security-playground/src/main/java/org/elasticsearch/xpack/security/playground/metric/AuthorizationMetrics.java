@@ -51,7 +51,7 @@ public class AuthorizationMetrics {
         } else {
             final HistogramsRecorder histogramsRecorder = CACHE_HISTOGRAMS.get(xOpaqueId);
             if (histogramsRecorder == null) {
-                logger.debug("no histogram records found for {} [{}]", Task.X_OPAQUE_ID, xOpaqueId);
+                logger.debug("no histogram records found for {} [{}]", Task.X_OPAQUE_ID_HTTP_HEADER, xOpaqueId);
                 return List.of();
             }
             return histogramsRecorder.getHistograms();

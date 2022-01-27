@@ -14,7 +14,7 @@ import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.client.ResponseListener;
-import org.elasticsearch.client.node.NodeClient;
+import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -129,7 +129,7 @@ public class RestMetricProxyAction extends SPBaseRestHandler {
                 value.forEach(v -> requestOptionsBuilder.addHeader(key, v));
             }
         });
-        requestOptionsBuilder.addHeader(Task.X_OPAQUE_ID, xOpaqueId).addHeader(Task.TRACE_PARENT, traceparent);
+        requestOptionsBuilder.addHeader(Task.X_OPAQUE_ID_HTTP_HEADER, xOpaqueId).addHeader(Task.TRACE_PARENT_HTTP_HEADER, traceparent);
         clientRequest.setOptions(requestOptionsBuilder);
         if (proxyRequest.body != null) {
             String bodyString = proxyRequest.body.utf8ToString();

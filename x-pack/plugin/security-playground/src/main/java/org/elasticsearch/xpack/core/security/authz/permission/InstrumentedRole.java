@@ -15,21 +15,55 @@ import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authz.accesscontrol.IndicesAccessControl;
+import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilegeDescriptor;
+import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilege;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-public class InstrumentedRole extends Role {
+public class InstrumentedRole implements Role {
 
     private static final Logger logger = LogManager.getLogger(InstrumentedRole.class);
 
+    private final Role delegate;
     private final Function<String, Runnable> startMetricFunc;
 
     public InstrumentedRole(Role role, Function<String, Runnable> startMetricFunc) {
-        super(role.names(), role.cluster(), role.indices(), role.application(), role.runAs());
+        this.delegate = role;
         this.startMetricFunc = startMetricFunc;
+    }
+
+    @Override
+    public String[] names() {
+        return delegate.names();
+    }
+
+    @Override
+    public ClusterPermission cluster() {
+        return delegate.cluster();
+    }
+
+    @Override
+    public IndicesPermission indices() {
+        return delegate.indices();
+    }
+
+    @Override
+    public ApplicationPermission application() {
+        return delegate.application();
+    }
+
+    @Override
+    public RunAsPermission runAs() {
+        return delegate.runAs();
+    }
+
+    @Override
+    public boolean hasFieldOrDocumentLevelSecurity() {
+        return delegate.hasFieldOrDocumentLevelSecurity();
     }
 
     @Override
@@ -37,7 +71,7 @@ public class InstrumentedRole extends Role {
         // TODO: injectable matcher
         final Runnable stopMetric = startMetricFunc.apply("ROLE_ALLOWED_INDICES_MATCHER");
         try {
-            return super.allowedIndicesMatcher(action);
+            return delegate.allowedIndicesMatcher(action);
         } finally {
             stopMetric.run();
         }
@@ -47,7 +81,7 @@ public class InstrumentedRole extends Role {
     public Automaton allowedActionsMatcher(String index) {
         final Runnable stopMetric = startMetricFunc.apply("ROLE_ALLOWED_ACTIONS_MATCHER");
         try {
-            return super.allowedActionsMatcher(index);
+            return delegate.allowedActionsMatcher(index);
         } finally {
             stopMetric.run();
         }
@@ -57,7 +91,7 @@ public class InstrumentedRole extends Role {
     public boolean checkRunAs(String runAsName) {
         final Runnable stopMetric = startMetricFunc.apply("ROLE_CHECK_RUN_AS");
         try {
-            return super.checkRunAs(runAsName);
+            return delegate.checkRunAs(runAsName);
         } finally {
             stopMetric.run();
         }
@@ -68,20 +102,44 @@ public class InstrumentedRole extends Role {
         final Runnable stopMetric = startMetricFunc.apply("ROLE_CHECK_INDICES_ACTION");
         try {
             // TODO: always allow _security_playground/index
-            return super.checkIndicesAction(action);
+            return delegate.checkIndicesAction(action);
         } finally {
             stopMetric.run();
         }
     }
 
     @Override
+    public ResourcePrivilegesMap checkIndicesPrivileges(
+        Set<String> checkForIndexPatterns,
+        boolean allowRestrictedIndices,
+        Set<String> checkForPrivileges
+    ) {
+        return null;
+    }
+
+    @Override
     public boolean checkClusterAction(String action, TransportRequest request, Authentication authentication) {
         final Runnable stopMetric = startMetricFunc.apply("ROLE_CHECK_CLUSTER_ACTION");
         try {
-            return super.checkClusterAction(action, request, authentication);
+            return delegate.checkClusterAction(action, request, authentication);
         } finally {
             stopMetric.run();
         }
+    }
+
+    @Override
+    public boolean grants(ClusterPrivilege clusterPrivilege) {
+        return false;
+    }
+
+    @Override
+    public ResourcePrivilegesMap checkApplicationResourcePrivileges(
+        String applicationName,
+        Set<String> checkForResources,
+        Set<String> checkForPrivilegeNames,
+        Collection<ApplicationPrivilegeDescriptor> storedPrivileges
+    ) {
+        return null;
     }
 
     @Override
@@ -99,7 +157,7 @@ public class InstrumentedRole extends Role {
             )
         );
         try {
-            return super.authorize(action, requestedIndicesOrAliases, aliasAndIndexLookup, fieldPermissionsCache);
+            return delegate.authorize(action, requestedIndicesOrAliases, aliasAndIndexLookup, fieldPermissionsCache);
         } finally {
             stopMetric.run();
         }

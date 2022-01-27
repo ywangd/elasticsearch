@@ -215,7 +215,7 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
     }
 
     private String getXOpaqueId() {
-        return threadContext.getHeader(Task.X_OPAQUE_ID);
+        return threadContext.getHeader(Task.X_OPAQUE_ID_HTTP_HEADER);
     }
 
     private String getOriginatingAction() {
