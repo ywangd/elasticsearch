@@ -91,7 +91,7 @@ public class SecurityPlaygroundPluginIT extends ESRestTestCase {
     public void testMetricHistogram() throws IOException, InterruptedException {
         final String xOpaqueId = randomAlphaOfLength(20);
         final Request request2 = new Request("POST", "/_security/role/*/_clear_cache");
-        request2.setOptions(request2.getOptions().toBuilder().addHeader(Task.X_OPAQUE_ID, xOpaqueId));
+        request2.setOptions(request2.getOptions().toBuilder().addHeader(Task.X_OPAQUE_ID_HTTP_HEADER, xOpaqueId));
         final Response response = adminClient().performRequest(request2);
         assertOK(response);
 

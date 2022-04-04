@@ -72,7 +72,7 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
     private final ThreadContext threadContext;
     private final SecurityContext securityContext;
     private final String nodeName;
-    private final AtomicReference<RBACEngine> rbacEngineRef = new AtomicReference<>();
+    private final AtomicReference<AuthorizationEngine> rbacEngineRef = new AtomicReference<>();
 
     private final boolean instrumentedRoleEnabled;
     private final boolean instrumentedRelevantInternalActionEnabled;
@@ -204,12 +204,27 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
         getRbacEngine().getUserPrivileges(authentication, authorizationInfo, request, listener);
     }
 
-    private RBACEngine getRbacEngine() {
+    private AuthorizationEngine getRbacEngine() {
         if (rbacEngineRef.get() == null) {
-            maybeInstrumentRelevantInternalAction();
+            AccessController.doPrivileged((PrivilegedAction<Void>) () -> {
+                try {
+                    final Field rbacEngineField = AuthorizationService.class.getDeclaredField("rbacEngine");
+                    rbacEngineField.setAccessible(true);
+                    final AuthorizationEngine originalRbacEngine = (AuthorizationEngine) rbacEngineField.get(
+                        TransportSPClusterAction.authorizationService
+                    );
+                    rbacEngineRef.compareAndSet(null, originalRbacEngine);
+                    if (instrumentedRelevantInternalActionEnabled) {
+                        logger.info("Instrumented Relevant Internal Action enabled");
+                        rbacEngineField.set(TransportSPClusterAction.authorizationService, this);
+                    }
+                    return null;
+                } catch (NoSuchFieldException | IllegalAccessException e) {
+                    throw new ElasticsearchException(e);
+                }
+            });
             maybeInstrumentIndicesAndAliasesResolver();
-            logger.info("Instantiate RBACEngine with injected [{}]", TransportSPClusterAction.compositeRolesStore);
-            rbacEngineRef.compareAndSet(null, new RBACEngine(settings, TransportSPClusterAction.compositeRolesStore));
+            logger.info("Completed getting RBACEngine");
         }
         return rbacEngineRef.get();
     }
@@ -431,22 +446,6 @@ public class InstrumentedAuthorizationEngine implements AuthorizationEngine {
             return (AuthorizationInfo) bridgeMethod.invoke(null, authorizationInfo, startMetricFunc);
         } catch (IllegalAccessException | InvocationTargetException e) {
             throw new ElasticsearchException(e);
-        }
-    }
-
-    private void maybeInstrumentRelevantInternalAction() {
-        if (instrumentedRelevantInternalActionEnabled) {
-            logger.info("Instrumented Relevant Internal Action enabled");
-            AccessController.doPrivileged((PrivilegedAction<Void>) () -> {
-                try {
-                    final Field rbacEngineField = AuthorizationService.class.getDeclaredField("rbacEngine");
-                    rbacEngineField.setAccessible(true);
-                    rbacEngineField.set(TransportSPClusterAction.authorizationService, this);
-                    return null;
-                } catch (NoSuchFieldException | IllegalAccessException e) {
-                    throw new ElasticsearchException(e);
-                }
-            });
         }
     }
 

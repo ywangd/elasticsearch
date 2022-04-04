@@ -47,7 +47,7 @@ public class InstrumentedAuthorizationEngineSingleNodeTestCase extends SecurityP
     public void testSPIndexTransport() {
         final String xOpaqueId = randomAlphaOfLength(20);
         try (ThreadContext.StoredContext ignored = client().threadPool().getThreadContext().newStoredContext(false)) {
-            client().threadPool().getThreadContext().putHeader(Task.X_OPAQUE_ID, xOpaqueId);
+            client().threadPool().getThreadContext().putHeader(Task.X_OPAQUE_ID_HTTP_HEADER, xOpaqueId);
             client().threadPool().getThreadContext().putHeader(Task.TRACE_ID, randomAlphaOfLength(32));
             final SPIndexAction.Response response = client().execute(SPIndexAction.INSTANCE, new SPIndexAction.Request()).actionGet();
             assertNotNull(response.resolvedNames);
@@ -93,11 +93,11 @@ public class InstrumentedAuthorizationEngineSingleNodeTestCase extends SecurityP
 
     public void testMetricHistogram() throws IOException, InterruptedException {
         try (ThreadContext.StoredContext ignored = client().threadPool().getThreadContext().newStoredContext(false)) {
-            client().threadPool().getThreadContext().putHeader(Task.X_OPAQUE_ID, "search");
+            client().threadPool().getThreadContext().putHeader(Task.X_OPAQUE_ID_HTTP_HEADER, "search");
             client().search(new SearchRequest()).actionGet();
         }
         try (ThreadContext.StoredContext ignored = client().threadPool().getThreadContext().newStoredContext(false)) {
-            client().threadPool().getThreadContext().putHeader(Task.X_OPAQUE_ID, "health");
+            client().threadPool().getThreadContext().putHeader(Task.X_OPAQUE_ID_HTTP_HEADER, "health");
             client().admin().cluster().health(new ClusterHealthRequest()).actionGet();
         }
 
@@ -220,7 +220,7 @@ public class InstrumentedAuthorizationEngineSingleNodeTestCase extends SecurityP
     }
 
     private Request addXOpaqueId(Request request, String xOpaqueId) {
-        request.setOptions(request.getOptions().toBuilder().addHeader(Task.X_OPAQUE_ID, xOpaqueId));
+        request.setOptions(request.getOptions().toBuilder().addHeader(Task.X_OPAQUE_ID_HTTP_HEADER, xOpaqueId));
         return request;
     }
 

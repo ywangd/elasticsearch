@@ -102,7 +102,7 @@ public class RestMetricProxyAction extends SPBaseRestHandler {
                         SECURITY_ORIGIN,
                         GetMetricInstantAction.INSTANCE,
                         new GetMetricInstantAction.Request(xOpaqueId, elapsed),
-                        new RestBuilderListener<GetMetricInstantAction.Response>(channel) {
+                        new RestBuilderListener<>(channel) {
                             @Override
                             public RestResponse buildResponse(GetMetricInstantAction.Response response, XContentBuilder builder)
                                 throws Exception {
@@ -199,8 +199,7 @@ public class RestMetricProxyAction extends SPBaseRestHandler {
         );
         builder.declareString(constructorArg(), new ParseField("path"));
         builder.declareString(optionalConstructorArg(), new ParseField("method"));
-        final ObjectParserHelper<MetricProxyRequest, Void> objectParserHelper = new ObjectParserHelper<>();
-        objectParserHelper.declareRawObjectOrNull(builder, optionalConstructorArg(), new ParseField("body"));
+        ObjectParserHelper.declareRawObjectOrNull(builder, optionalConstructorArg(), new ParseField("body"));
         PARSER = builder.build();
     }
 

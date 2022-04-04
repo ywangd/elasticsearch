@@ -27,12 +27,14 @@ dependencies {
   internalClusterTestImplementation(testArtifact(project(xpackModule('security'))))
 }
 
-tasks.named("bundlePlugin").configure{
-  from ('build/classes/java/main/org/elasticsearch/xpack/security/authz/') {
-    into 'security/org/elasticsearch/xpack/security/authz'
-  }
-  from ('build/classes/java/main/org/elasticsearch/xpack/core/security/authz/permission') {
-    into 'core/org/elasticsearch/xpack/core/security/authz/permission'
+["bundlePlugin", "explodedBundlePlugin"].each { bundleTaskName ->
+  tasks.named(bundleTaskName).configure {
+    from ('build/classes/java/main/org/elasticsearch/xpack/security/authz/') {
+      into 'security/org/elasticsearch/xpack/security/authz'
+    }
+    from ('build/classes/java/main/org/elasticsearch/xpack/core/security/authz/permission') {
+      into 'core/org/elasticsearch/xpack/core/security/authz/permission'
+    }
   }
 }
 
