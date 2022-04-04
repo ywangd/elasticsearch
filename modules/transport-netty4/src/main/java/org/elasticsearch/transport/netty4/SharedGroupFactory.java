@@ -21,6 +21,9 @@ import org.elasticsearch.http.HttpServerTransport;
 import org.elasticsearch.http.netty4.Netty4HttpServerTransport;
 import org.elasticsearch.transport.TcpTransport;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -78,10 +81,26 @@ public final class SharedGroupFactory {
 
     private SharedGroup getGenericGroup() {
         if (genericGroup == null) {
-            EventLoopGroup eventLoopGroup = new NioEventLoopGroup(
-                workerCount,
-                EsExecutors.daemonThreadFactory(settings, TcpTransport.TRANSPORT_WORKER_THREAD_NAME_PREFIX)
-            );
+            final String threadName = EsExecutors.threadName(settings, TcpTransport.TRANSPORT_WORKER_THREAD_NAME_PREFIX);
+            EventLoopGroup eventLoopGroup;
+            if ("true".equals(System.getProperty("es.loom_enabled"))) {
+                logger.info("Project Loom enabled. Registering EsVirtualThreadFactory");
+                try {
+                    final Class<?> clazz = Class.forName("org.elasticsearch.common.util.concurrent.EsVirtualThreadFactory");
+                    final Constructor<?> constructor = clazz.getConstructors()[0];
+                    eventLoopGroup = new NioEventLoopGroup(
+                        1024,
+                        (ThreadFactory) constructor.newInstance(threadName)
+                    );
+                } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | InvocationTargetException e) {
+                    throw new RuntimeException(e);
+                }
+            } else {
+                eventLoopGroup = new NioEventLoopGroup(
+                    workerCount,
+                    EsExecutors.daemonThreadFactory(settings, TcpTransport.TRANSPORT_WORKER_THREAD_NAME_PREFIX)
+                );
+            }
             this.genericGroup = new RefCountedGroup(eventLoopGroup);
         } else {
             genericGroup.incRef();

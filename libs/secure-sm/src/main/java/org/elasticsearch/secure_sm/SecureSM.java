@@ -114,6 +114,14 @@ public class SecureSM extends SecurityManager {
     });
 
     @Override
+    public void checkPermission(Permission perm) {
+        if (Thread.currentThread().getClass().getName().endsWith("java.lang.VirtualThread")) {
+            return; // skip for virtual threads
+        }
+        super.checkPermission(perm);
+    }
+
+    @Override
     @SuppressForbidden(reason = "java.security.debug messages go to standard error")
     public void checkAccess(Thread t) {
         try {
@@ -162,6 +170,10 @@ public class SecureSM extends SecurityManager {
     protected void checkThreadAccess(Thread t) {
         Objects.requireNonNull(t);
 
+        if (t.getClass().getName().endsWith("java.lang.VirtualThread")) {
+            return; // skip for virtual threads
+        }
+
         // first, check if we can modify threads at all.
         checkPermission(MODIFY_THREAD_PERMISSION);
 
@@ -181,6 +193,10 @@ public class SecureSM extends SecurityManager {
 
     protected void checkThreadGroupAccess(ThreadGroup g) {
         Objects.requireNonNull(g);
+
+        if (Thread.currentThread().getClass().getName().endsWith("java.lang.VirtualThread")) {
+            return; // skip for virtual threads
+        }
 
         // first, check if we can modify thread groups at all.
         checkPermission(MODIFY_THREADGROUP_PERMISSION);
