@@ -36,12 +36,30 @@ public class UpdateRequestInterceptor extends FieldAndDocumentLevelSecurityReque
         Map<String, IndicesAccessControl.IndexAccessControl> indicesAccessControlByIndex,
         ActionListener<Void> listener
     ) {
-        listener.onFailure(
-            new ElasticsearchSecurityException(
-                "Can't execute an update request if field or document level security " + "is enabled",
-                RestStatus.BAD_REQUEST
-            )
-        );
+        for (IndicesAccessControl.IndexAccessControl iac : indicesAccessControlByIndex.values()) {
+            if (iac.getFieldPermissions().hasFieldLevelSecurity()) {
+                listener.onFailure(
+                    new ElasticsearchSecurityException(
+                        "Can't execute an update request if field level security is enabled",
+                        RestStatus.BAD_REQUEST
+                    )
+                );
+                return;
+            }
+            if (iac.getDocumentPermissions().hasDocumentLevelPermissions()) {
+                final UpdateRequest updateRequest = (UpdateRequest) indicesRequest;
+                if (updateRequest.upsertRequest() != null || updateRequest.docAsUpsert()) {
+                    listener.onFailure(
+                        new ElasticsearchSecurityException(
+                            "Can't execute an upsert request if document level security is enabled",
+                            RestStatus.BAD_REQUEST
+                        )
+                    );
+                    return;
+                }
+            }
+        }
+        listener.onResponse(null);
     }
 
     @Override

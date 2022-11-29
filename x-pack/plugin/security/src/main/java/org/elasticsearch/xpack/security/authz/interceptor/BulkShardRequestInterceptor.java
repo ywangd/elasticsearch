@@ -61,17 +61,30 @@ public class BulkShardRequestInterceptor implements RequestInterceptor {
             ) {
                 for (BulkItemRequest bulkItemRequest : bulkShardRequest.items()) {
                     boolean found = false;
-                    if (bulkItemRequest.request() instanceof UpdateRequest) {
+                    if (bulkItemRequest.request()instanceof UpdateRequest updateRequest) {
                         found = true;
                         logger.trace("aborting bulk item update request for index [{}]", bulkShardRequest.index());
-                        bulkItemRequest.abort(
-                            bulkItemRequest.index(),
-                            new ElasticsearchSecurityException(
-                                "Can't execute a bulk "
-                                    + "item request with update requests embedded if field or document level security is enabled",
-                                RestStatus.BAD_REQUEST
-                            )
-                        );
+                        if (indexAccessControl.getFieldPermissions().hasFieldLevelSecurity()) {
+                            bulkItemRequest.abort(
+                                bulkItemRequest.index(),
+                                new ElasticsearchSecurityException(
+                                    "Can't execute a bulk "
+                                        + "item request with update requests embedded if field level security is enabled",
+                                    RestStatus.BAD_REQUEST
+                                )
+                            );
+                        } else if (indexAccessControl.getDocumentPermissions().hasDocumentLevelPermissions()) {
+                            if (updateRequest.upsertRequest() != null || updateRequest.docAsUpsert()) {
+                                bulkItemRequest.abort(
+                                    bulkItemRequest.index(),
+                                    new ElasticsearchSecurityException(
+                                        "Can't execute a bulk "
+                                            + "item request with upsert requests embedded if document level security is enabled",
+                                        RestStatus.BAD_REQUEST
+                                    )
+                                );
+                            }
+                        }
                     }
                     if (found == false) {
                         logger.trace(
