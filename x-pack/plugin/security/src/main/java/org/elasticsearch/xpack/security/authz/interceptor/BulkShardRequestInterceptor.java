@@ -64,26 +64,16 @@ public class BulkShardRequestInterceptor implements RequestInterceptor {
                     if (bulkItemRequest.request()instanceof UpdateRequest updateRequest) {
                         found = true;
                         logger.trace("aborting bulk item update request for index [{}]", bulkShardRequest.index());
-                        if (indexAccessControl.getFieldPermissions().hasFieldLevelSecurity()) {
+                        if (updateRequest.upsertRequest() != null || updateRequest.docAsUpsert()) {
+                            // TODO: FLS can actually work with upsert, but disabling it now for simplicity
                             bulkItemRequest.abort(
                                 bulkItemRequest.index(),
                                 new ElasticsearchSecurityException(
                                     "Can't execute a bulk "
-                                        + "item request with update requests embedded if field level security is enabled",
+                                        + "item request with upsert requests embedded if field or document level security is enabled",
                                     RestStatus.BAD_REQUEST
                                 )
                             );
-                        } else if (indexAccessControl.getDocumentPermissions().hasDocumentLevelPermissions()) {
-                            if (updateRequest.upsertRequest() != null || updateRequest.docAsUpsert()) {
-                                bulkItemRequest.abort(
-                                    bulkItemRequest.index(),
-                                    new ElasticsearchSecurityException(
-                                        "Can't execute a bulk "
-                                            + "item request with upsert requests embedded if document level security is enabled",
-                                        RestStatus.BAD_REQUEST
-                                    )
-                                );
-                            }
                         }
                     }
                     if (found == false) {

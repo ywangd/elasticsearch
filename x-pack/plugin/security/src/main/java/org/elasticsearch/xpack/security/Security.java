@@ -15,6 +15,7 @@ import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.action.support.DestructiveOperations;
+import org.elasticsearch.action.update.UpdateHelper;
 import org.elasticsearch.bootstrap.BootstrapCheck;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
@@ -935,6 +936,9 @@ public class Security extends Plugin
         reservedRoleMappingAction.set(new ReservedRoleMappingAction(nativeRoleMappingStore));
 
         cacheInvalidatorRegistry.validate();
+
+        final UpdateHelper updateHelper = new SecurityDefaultUpdateHelper(scriptService, securityContext.get());
+        components.add(updateHelper);
 
         return components;
     }

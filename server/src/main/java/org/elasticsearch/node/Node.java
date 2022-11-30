@@ -1038,7 +1038,7 @@ public class Node implements Closeable {
                 b.bind(Transport.class).toInstance(transport);
                 b.bind(TransportService.class).toInstance(transportService);
                 b.bind(NetworkService.class).toInstance(networkService);
-                b.bind(UpdateHelper.class).toInstance(new UpdateHelper(scriptService));
+                // b.bind(UpdateHelper.class).toInstance(new UpdateHelper(scriptService));
                 b.bind(IndexMetadataVerifier.class).toInstance(indexMetadataVerifier);
                 b.bind(ClusterInfoService.class).toInstance(clusterInfoService);
                 b.bind(SnapshotsInfoService.class).toInstance(snapshotsInfoService);
@@ -1067,6 +1067,9 @@ public class Node implements Closeable {
                     @SuppressWarnings("unchecked")
                     Class<Object> pluginClass = (Class<Object>) p.getClass();
                     b.bind(pluginClass).toInstance(p);
+                    if (UpdateHelper.class.isAssignableFrom(pluginClass)) {
+                        b.bind(UpdateHelper.class).toInstance((UpdateHelper) p);
+                    }
                 });
                 b.bind(PersistentTasksService.class).toInstance(persistentTasksService);
                 b.bind(PersistentTasksClusterService.class).toInstance(persistentTasksClusterService);

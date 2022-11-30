@@ -19,6 +19,8 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.util.CollectionUtils;
+import org.elasticsearch.common.util.Maps;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.xpack.core.security.authz.accesscontrol.FieldSubsetReader;
 import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsDefinition.FieldGrantExcludeGroup;
 import org.elasticsearch.xpack.core.security.authz.support.SecurityQueryTemplateEvaluator.DlsQueryEvaluationContext;
@@ -29,6 +31,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -263,5 +266,12 @@ public final class FieldPermissions implements Accountable, CacheKey {
     @Override
     public long ramBytesUsed() {
         return ramBytesUsed;
+    }
+
+    public void validate(Map<String, Object> map) {
+        final Map<String, Object> filteredMap = FieldSubsetReader.filter(map, permittedFieldsAutomaton, 0);
+        if (false == Maps.deepEquals(map, filteredMap)) {
+            throw new ElasticsearchSecurityException("some fields are not accessible", RestStatus.BAD_REQUEST);
+        }
     }
 }

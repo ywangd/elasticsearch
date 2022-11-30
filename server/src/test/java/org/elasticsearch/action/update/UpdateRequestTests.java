@@ -61,7 +61,7 @@ import static org.hamcrest.Matchers.notNullValue;
 
 public class UpdateRequestTests extends ESTestCase {
 
-    private UpdateHelper updateHelper;
+    private DefaultUpdateHelper updateHelper;
 
     @Override
     @Before
@@ -113,7 +113,7 @@ public class UpdateRequestTests extends ESTestCase {
         final MockScriptEngine engine = new MockScriptEngine("mock", scripts, Collections.emptyMap());
         Map<String, ScriptEngine> engines = Collections.singletonMap(engine.getType(), engine);
         ScriptService scriptService = new ScriptService(baseSettings, engines, ScriptModule.CORE_CONTEXTS, () -> 1L);
-        updateHelper = new UpdateHelper(scriptService);
+        updateHelper = new DefaultUpdateHelper(scriptService);
     }
 
     @SuppressWarnings("unchecked")
@@ -355,7 +355,13 @@ public class UpdateRequestTests extends ESTestCase {
             long nowInMillis = randomNonNegativeLong();
             // We simulate that the document is not existing yet
             GetResult getResult = new GetResult("test", "2", UNASSIGNED_SEQ_NO, 0, 0, false, null, null, null);
-            UpdateHelper.Result result = updateHelper.prepare(new ShardId("test", "_na_", 0), updateRequest, getResult, () -> nowInMillis);
+            UpdateHelper.Result result = updateHelper.prepare(
+                new ShardId("test", "_na_", 0),
+                updateRequest,
+                getResult,
+                () -> nowInMillis,
+                null
+            );
             Writeable action = result.action();
             assertThat(action, instanceOf(IndexRequest.class));
             IndexRequest indexAction = (IndexRequest) action;
@@ -398,7 +404,8 @@ public class UpdateRequestTests extends ESTestCase {
             new ShardId("test", "", 0),
             updateRequest,
             getResult,
-            ESTestCase::randomNonNegativeLong
+            ESTestCase::randomNonNegativeLong,
+            null
         );
         final Writeable action = result.action();
         assertThat(action, instanceOf(ReplicationRequest.class));
@@ -547,13 +554,13 @@ public class UpdateRequestTests extends ESTestCase {
             createParser(JsonXContent.jsonXContent, new BytesArray("{\"doc\": {\"body\": \"foo\"}}"))
         );
 
-        UpdateHelper.Result result = UpdateHelper.prepareUpdateIndexRequest(shardId, request, getResult, true);
+        UpdateHelper.Result result = updateHelper.prepareUpdateIndexRequest(shardId, request, getResult, true, null);
 
         assertThat(result.action(), instanceOf(UpdateResponse.class));
         assertThat(result.getResponseResult(), equalTo(DocWriteResponse.Result.NOOP));
 
         // Try again, with detectNoop turned off
-        result = UpdateHelper.prepareUpdateIndexRequest(shardId, request, getResult, false);
+        result = updateHelper.prepareUpdateIndexRequest(shardId, request, getResult, false, null);
         assertThat(result.action(), instanceOf(IndexRequest.class));
         assertThat(result.getResponseResult(), equalTo(DocWriteResponse.Result.UPDATED));
         assertThat(result.updatedSourceAsMap().get("body").toString(), equalTo("foo"));
@@ -562,7 +569,7 @@ public class UpdateRequestTests extends ESTestCase {
         request = new UpdateRequest("test", "1").fromXContent(
             createParser(JsonXContent.jsonXContent, new BytesArray("{\"doc\": {\"body\": \"bar\"}}"))
         );
-        result = UpdateHelper.prepareUpdateIndexRequest(shardId, request, getResult, true);
+        result = updateHelper.prepareUpdateIndexRequest(shardId, request, getResult, true, null);
 
         assertThat(result.action(), instanceOf(IndexRequest.class));
         assertThat(result.getResponseResult(), equalTo(DocWriteResponse.Result.UPDATED));
@@ -580,7 +587,8 @@ public class UpdateRequestTests extends ESTestCase {
             shardId,
             request,
             getResult,
-            ESTestCase::randomNonNegativeLong
+            ESTestCase::randomNonNegativeLong,
+            null
         );
 
         assertThat(result.action(), instanceOf(IndexRequest.class));
@@ -590,7 +598,7 @@ public class UpdateRequestTests extends ESTestCase {
         // Now where the script changes the op to "delete"
         request = new UpdateRequest("test", "1").script(mockInlineScript("ctx.op = 'delete'"));
 
-        result = updateHelper.prepareUpdateScriptRequest(shardId, request, getResult, ESTestCase::randomNonNegativeLong);
+        result = updateHelper.prepareUpdateScriptRequest(shardId, request, getResult, ESTestCase::randomNonNegativeLong, null);
 
         assertThat(result.action(), instanceOf(DeleteRequest.class));
         assertThat(result.getResponseResult(), equalTo(DocWriteResponse.Result.DELETED));
@@ -603,7 +611,7 @@ public class UpdateRequestTests extends ESTestCase {
             request = new UpdateRequest("test", "1").script(mockInlineScript("ctx.op = 'bad'"));
         }
 
-        result = updateHelper.prepareUpdateScriptRequest(shardId, request, getResult, ESTestCase::randomNonNegativeLong);
+        result = updateHelper.prepareUpdateScriptRequest(shardId, request, getResult, ESTestCase::randomNonNegativeLong, null);
 
         assertThat(result.action(), instanceOf(UpdateResponse.class));
         assertThat(result.getResponseResult(), equalTo(DocWriteResponse.Result.NOOP));

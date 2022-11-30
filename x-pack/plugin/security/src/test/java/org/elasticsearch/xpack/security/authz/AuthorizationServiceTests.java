@@ -79,8 +79,8 @@ import org.elasticsearch.action.termvectors.MultiTermVectorsAction;
 import org.elasticsearch.action.termvectors.MultiTermVectorsRequest;
 import org.elasticsearch.action.termvectors.TermVectorsAction;
 import org.elasticsearch.action.termvectors.TermVectorsRequest;
+import org.elasticsearch.action.update.DefaultUpdateHelper;
 import org.elasticsearch.action.update.UpdateAction;
-import org.elasticsearch.action.update.UpdateHelper;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.AliasMetadata;
@@ -1466,7 +1466,7 @@ public class AuthorizationServiceTests extends ESTestCase {
         TransportShardBulkAction.performOnPrimary(
             request,
             indexShard,
-            new UpdateHelper(mock(ScriptService.class)),
+            new DefaultUpdateHelper(mock(ScriptService.class)),
             System::currentTimeMillis,
             mappingUpdater,
             waitForMappingUpdate,
