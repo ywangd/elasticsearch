@@ -121,6 +121,7 @@ module org.elasticsearch.xcore {
     exports org.elasticsearch.xpack.core.scheduler;
     exports org.elasticsearch.xpack.core.search.action;
     exports org.elasticsearch.xpack.core.searchablesnapshots;
+    exports org.elasticsearch.xpack.core.remotecluster;
     exports org.elasticsearch.xpack.core.security.action.apikey;
     exports org.elasticsearch.xpack.core.security.action.enrollment;
     exports org.elasticsearch.xpack.core.security.action.oidc;

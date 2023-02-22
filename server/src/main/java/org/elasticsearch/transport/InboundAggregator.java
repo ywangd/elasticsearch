@@ -8,6 +8,8 @@
 
 package org.elasticsearch.transport;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -24,6 +26,8 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public class InboundAggregator implements Releasable {
+
+    private static final Logger logger = LogManager.getLogger(InboundAggregator.class);
 
     private final Supplier<CircuitBreaker> circuitBreaker;
     private final Predicate<String> requestCanTripBreaker;
@@ -43,9 +47,11 @@ public class InboundAggregator implements Releasable {
         this(circuitBreaker, (Predicate<String>) actionName -> {
             final RequestHandlerRegistry<TransportRequest> reg = registryFunction.apply(actionName);
             if (reg == null) {
+                logger.warn("request handler NOT FOUND for action [{}]", actionName);
                 assert ignoreDeserializationErrors : actionName;
                 throw new ActionNotFoundTransportException(actionName);
             } else {
+                logger.warn("request handler [{}] found for action [{}]", reg.getHandler(), actionName);
                 return reg.canTripCircuitBreaker();
             }
         });

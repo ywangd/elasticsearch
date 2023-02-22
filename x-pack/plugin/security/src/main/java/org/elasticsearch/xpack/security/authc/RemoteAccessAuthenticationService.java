@@ -42,7 +42,11 @@ public class RemoteAccessAuthenticationService {
 
     public static final RoleDescriptor CROSS_CLUSTER_INTERNAL_ROLE = new RoleDescriptor(
         "_cross_cluster_internal",
-        new String[] { ClusterStateAction.NAME },
+        new String[] {
+            ClusterStateAction.NAME,
+            "cluster:monitor/xpack/info",
+            "cluster:monitor/state",
+            "cluster:admin/remote_cluster/relay" },
         null,
         null,
         null,
@@ -115,7 +119,7 @@ public class RemoteAccessAuthenticationService {
                     validate(remoteAccessAuthentication);
                     writeAuthToContext(
                         authcContext,
-                        authentication.toRemoteAccess(maybeRewriteForSystemUser(remoteAccessAuthentication)),
+                        authentication.toRemoteAccess(maybeRewriteForSystemUser(remoteAccessAuthentication, action)),
                         listener
                     );
                 }, ex -> withRequestProcessingFailure(authcContext, ex, listener)))
@@ -123,11 +127,15 @@ public class RemoteAccessAuthenticationService {
         }
     }
 
-    private static RemoteAccessAuthentication maybeRewriteForSystemUser(final RemoteAccessAuthentication remoteAccessAuthentication)
-        throws IOException {
+    private static RemoteAccessAuthentication maybeRewriteForSystemUser(
+        final RemoteAccessAuthentication remoteAccessAuthentication,
+        String action
+    ) throws IOException {
         final Subject receivedEffectiveSubject = remoteAccessAuthentication.getAuthentication().getEffectiveSubject();
         final User user = receivedEffectiveSubject.getUser();
-        if (SystemUser.is(user)) {
+        if (SystemUser.is(user)
+            || Set.of("cluster:monitor/xpack/info", "cluster:monitor/state", "cluster:admin/remote_cluster/relay").contains(action)) {
+            logger.warn("USER is [{}], ACTION is [{}]", user, action);
             return new RemoteAccessAuthentication(
                 Authentication.newInternalAuthentication(
                     SystemUser.INSTANCE,

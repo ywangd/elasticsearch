@@ -7,6 +7,8 @@
  */
 package org.elasticsearch.transport;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
@@ -24,6 +26,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class RemoteConnectionManager implements ConnectionManager {
+
+    private static final Logger logger = LogManager.getLogger(RemoteConnectionManager.class);
 
     private final String clusterAlias;
     private final ConnectionManager delegate;
@@ -96,9 +100,11 @@ public class RemoteConnectionManager implements ConnectionManager {
 
     @Override
     public Transport.Connection getConnection(DiscoveryNode node) {
+        logger.warn("getting connection for [{}]", node);
         try {
             return getConnectionInternal(node);
         } catch (NodeNotConnectedException e) {
+            logger.warn("no connection for [{}], PROXY it", node);
             return new ProxyConnection(getAnyRemoteConnection(), node);
         }
     }
@@ -199,6 +205,7 @@ public class RemoteConnectionManager implements ConnectionManager {
     }
 
     static final class ProxyConnection implements Transport.Connection {
+        private static final Logger logger = LogManager.getLogger(ProxyConnection.class);
         private final Transport.Connection connection;
         private final DiscoveryNode targetNode;
 
@@ -215,6 +222,7 @@ public class RemoteConnectionManager implements ConnectionManager {
         @Override
         public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)
             throws IOException, TransportException {
+            logger.warn("PROXY action [{}], request [{}]", action, request);
             connection.sendRequest(
                 requestId,
                 TransportActionProxy.getProxyAction(action),
@@ -368,6 +376,11 @@ public class RemoteConnectionManager implements ConnectionManager {
         @Override
         public boolean hasReferences() {
             return connection.hasReferences();
+        }
+
+        @Override
+        public String toString() {
+            return "InternalRemoteConnection{" + "connection=" + connection + ", clusterAlias='" + clusterAlias + '\'' + '}';
         }
     }
 

@@ -18,6 +18,10 @@ import org.elasticsearch.action.search.SearchAction;
 import org.elasticsearch.action.search.SearchTransportService;
 import org.elasticsearch.action.search.TransportOpenPointInTimeAction;
 import org.elasticsearch.action.support.DestructiveOperations;
+import org.elasticsearch.common.io.stream.BytesStreamOutput;
+import org.elasticsearch.common.io.stream.NamedWriteableAwareStreamInput;
+import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.ssl.SslConfiguration;
 import org.elasticsearch.common.util.Maps;
@@ -32,6 +36,7 @@ import org.elasticsearch.transport.TcpTransport;
 import org.elasticsearch.transport.Transport;
 import org.elasticsearch.transport.TransportActionProxy;
 import org.elasticsearch.transport.TransportChannel;
+import org.elasticsearch.transport.TransportException;
 import org.elasticsearch.transport.TransportInterceptor;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.transport.TransportRequestHandler;
@@ -41,6 +46,7 @@ import org.elasticsearch.transport.TransportResponseHandler;
 import org.elasticsearch.transport.TransportService;
 import org.elasticsearch.transport.TransportService.ContextRestoreResponseHandler;
 import org.elasticsearch.xpack.core.XPackSettings;
+import org.elasticsearch.xpack.core.remotecluster.RemoteProxyAction;
 import org.elasticsearch.xpack.core.security.SecurityContext;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.RemoteAccessAuthentication;
@@ -58,11 +64,13 @@ import org.elasticsearch.xpack.security.authz.AuthorizationUtils;
 import org.elasticsearch.xpack.security.authz.PreAuthorizationUtils;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -79,6 +87,7 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
     static {
         final Stream<String> actions = Stream.of(
             TransportService.HANDSHAKE_ACTION_NAME,
+            "cluster:admin/xpack/security/user/has_privileges",
             SearchAction.NAME,
             ClusterStateAction.NAME,
             ClusterSearchShardsAction.NAME,
@@ -115,6 +124,7 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
     private final RemoteAccessAuthenticationService remoteAccessAuthcService;
     private final RemoteClusterAuthorizationResolver remoteClusterAuthorizationResolver;
     private final Function<Transport.Connection, Optional<String>> remoteClusterAliasResolver;
+    private final Supplier<NamedWriteableRegistry> namedWriteableRegistry;
 
     public SecurityServerTransportInterceptor(
         Settings settings,
@@ -125,7 +135,8 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
         SecurityContext securityContext,
         DestructiveOperations destructiveOperations,
         RemoteAccessAuthenticationService remoteAccessAuthcService,
-        RemoteClusterAuthorizationResolver remoteClusterAuthorizationResolver
+        RemoteClusterAuthorizationResolver remoteClusterAuthorizationResolver,
+        Supplier<NamedWriteableRegistry> namedWriteableRegistry
     ) {
         this(
             settings,
@@ -137,7 +148,8 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
             destructiveOperations,
             remoteAccessAuthcService,
             remoteClusterAuthorizationResolver,
-            RemoteConnectionManager::resolveRemoteClusterAlias
+            RemoteConnectionManager::resolveRemoteClusterAlias,
+            namedWriteableRegistry
         );
     }
 
@@ -152,7 +164,8 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
         RemoteAccessAuthenticationService remoteAccessAuthcService,
         RemoteClusterAuthorizationResolver remoteClusterAuthorizationResolver,
         // Inject for simplified testing
-        Function<Transport.Connection, Optional<String>> remoteClusterAliasResolver
+        Function<Transport.Connection, Optional<String>> remoteClusterAliasResolver,
+        Supplier<NamedWriteableRegistry> namedWriteableRegistry
     ) {
         this.settings = settings;
         this.threadPool = threadPool;
@@ -164,6 +177,7 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
         this.profileFilters = initializeProfileFilters(destructiveOperations);
         this.remoteClusterAuthorizationResolver = remoteClusterAuthorizationResolver;
         this.remoteClusterAliasResolver = remoteClusterAliasResolver;
+        this.namedWriteableRegistry = namedWriteableRegistry;
     }
 
     @Override
@@ -187,6 +201,13 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
             ) {
                 assertNoRemoteAccessHeadersInContext();
                 final Optional<String> remoteClusterAlias = remoteClusterAliasResolver.apply(connection);
+                logger.warn(
+                    "sending action [{}], request[{}] to node [{}] connection [{}]",
+                    action,
+                    request,
+                    connection.getNode(),
+                    connection
+                );
                 if (PreAuthorizationUtils.shouldRemoveParentAuthorizationFromThreadContext(remoteClusterAlias, action, securityContext)) {
                     securityContext.executeAfterRemovingParentAuthorization(original -> {
                         sendRequestInner(
@@ -345,12 +366,14 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
             ) {
                 final String remoteClusterAlias = remoteAccessCredentials.clusterAlias();
                 if (false == REMOTE_ACCESS_ACTION_ALLOWLIST.contains(action)) {
-                    throw new IllegalArgumentException(
-                        "action ["
-                            + action
-                            + "] towards remote cluster ["
-                            + remoteClusterAlias
-                            + "] cannot be executed because it is not allowed as a cross cluster operation"
+                    logger.error(
+                        new IllegalArgumentException(
+                            "action ["
+                                + action
+                                + "] towards remote cluster ["
+                                + remoteClusterAlias
+                                + "] cannot be executed because it is not allowed as a cross cluster operation"
+                        )
                     );
                 }
                 if (connection.getTransportVersion().before(VERSION_REMOTE_ACCESS_HEADERS)) {
@@ -376,7 +399,7 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
                 final ThreadContext threadContext = securityContext.getThreadContext();
                 final var contextRestoreHandler = new ContextRestoreResponseHandler<>(threadContext.newRestorableContext(true), handler);
                 final User user = authentication.getEffectiveSubject().getUser();
-                if (SystemUser.is(user)) {
+                if (SystemUser.is(user) || false == REMOTE_ACCESS_ACTION_ALLOWLIST.contains(action)) {
                     try (ThreadContext.StoredContext ignored = threadContext.stashContext()) {
                         new RemoteAccessHeaders(
                             remoteAccessCredentials.credentials(),
@@ -385,7 +408,57 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
                             // authentication instance
                             new RemoteAccessAuthentication(authentication, RoleDescriptorsIntersection.EMPTY)
                         ).writeToContext(threadContext);
-                        sender.sendRequest(connection, action, request, options, contextRestoreHandler);
+
+                        if (action.equals(TransportService.HANDSHAKE_ACTION_NAME)) {
+                            sender.sendRequest(connection, action, request, options, contextRestoreHandler);
+                        } else {
+                            final BytesStreamOutput out = new BytesStreamOutput();
+                            request.writeTo(out);
+                            final Transport.Connection unwrapConnection = TransportService.unwrapConnection(connection);
+                            final boolean isWrappedConnection = unwrapConnection != connection;
+                            if (isWrappedConnection) {
+                                logger.warn("Unwrapped proxy connection for [{}], [{}]", action, connection.getNode());
+                            } else {
+                                logger.warn("connection is not wrapped [{}], [{}]", action, connection.getNode());
+                            }
+                            sender.sendRequest(
+                                unwrapConnection,
+                                RemoteProxyAction.NAME,
+                                new RemoteProxyAction.RemoteProxyRequest(
+                                    action,
+                                    out.bytes(),
+                                    isWrappedConnection ? connection.getNode() : null
+                                ),
+                                options,
+                                new TransportResponseHandler<RemoteProxyAction.RemoteProxyResponse>() {
+                                    @Override
+                                    public void handleResponse(RemoteProxyAction.RemoteProxyResponse response) {
+                                        try {
+                                            contextRestoreHandler.handleResponse(
+                                                contextRestoreHandler.read(
+                                                    new NamedWriteableAwareStreamInput(
+                                                        response.getBody().streamInput(),
+                                                        namedWriteableRegistry.get()
+                                                    )
+                                                )
+                                            );
+                                        } catch (IOException e) {
+                                            throw new UncheckedIOException(e);
+                                        }
+                                    }
+
+                                    @Override
+                                    public void handleException(TransportException exp) {
+                                        contextRestoreHandler.handleException(exp);
+                                    }
+
+                                    @Override
+                                    public RemoteProxyAction.RemoteProxyResponse read(StreamInput in) throws IOException {
+                                        return new RemoteProxyAction.RemoteProxyResponse(in);
+                                    }
+                                }
+                            );
+                        }
                     } catch (IOException e) {
                         contextRestoreHandler.handleException(new SendRequestTransportException(connection.getNode(), action, e));
                     }
