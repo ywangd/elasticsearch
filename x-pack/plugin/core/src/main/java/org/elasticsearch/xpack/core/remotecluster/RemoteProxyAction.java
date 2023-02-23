@@ -150,7 +150,7 @@ public class RemoteProxyAction extends ActionType<RemoteProxyAction.RemoteProxyR
                     return new RemoteProxyResponse(out.bytes());
                 })), responseReader);
 
-            logger.warn("Requested node is [{}]", request.getNode());
+            logger.info("Requested node is [{}]", request.getNode());
 
             final ThreadContext threadContext = transportService.getThreadPool().getThreadContext();
             try (var ignore = threadContext.stashContext()) {

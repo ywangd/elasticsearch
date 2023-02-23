@@ -135,7 +135,6 @@ public class RemoteAccessAuthenticationService {
         final User user = receivedEffectiveSubject.getUser();
         if (SystemUser.is(user)
             || Set.of("cluster:monitor/xpack/info", "cluster:monitor/state", "cluster:admin/remote_cluster/relay").contains(action)) {
-            logger.warn("USER is [{}], ACTION is [{}]", user, action);
             return new RemoteAccessAuthentication(
                 Authentication.newInternalAuthentication(
                     SystemUser.INSTANCE,

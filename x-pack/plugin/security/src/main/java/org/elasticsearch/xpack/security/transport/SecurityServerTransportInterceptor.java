@@ -366,7 +366,7 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
             ) {
                 final String remoteClusterAlias = remoteAccessCredentials.clusterAlias();
                 if (false == REMOTE_ACCESS_ACTION_ALLOWLIST.contains(action)) {
-                    logger.error(
+                    logger.warn(
                         new IllegalArgumentException(
                             "action ["
                                 + action
@@ -416,11 +416,6 @@ public class SecurityServerTransportInterceptor implements TransportInterceptor 
                             request.writeTo(out);
                             final Transport.Connection unwrapConnection = TransportService.unwrapConnection(connection);
                             final boolean isWrappedConnection = unwrapConnection != connection;
-                            if (isWrappedConnection) {
-                                logger.warn("Unwrapped proxy connection for [{}], [{}]", action, connection.getNode());
-                            } else {
-                                logger.warn("connection is not wrapped [{}], [{}]", action, connection.getNode());
-                            }
                             sender.sendRequest(
                                 unwrapConnection,
                                 RemoteProxyAction.NAME,
