@@ -196,6 +196,11 @@ public final class IndicesPermission {
             return new IsResourceAuthorizedPredicate(this.biPredicate.and(other));
         }
 
+        @Override
+        public final IsResourceAuthorizedPredicate or(BiPredicate<? super String, ? super IndexAbstraction> other) {
+            return new IsResourceAuthorizedPredicate(this.biPredicate.or(other));
+        }
+
         /**
          * Verifies if access is authorized to the given {@param indexAbstraction} resource.
          * The resource must exist. Otherwise, use the {@link #test(String, IndexAbstraction)} method.

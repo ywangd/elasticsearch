@@ -35,6 +35,8 @@ import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsCa
 import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsDefinition;
 import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsDefinition.FieldGrantExcludeGroup;
 import org.elasticsearch.xpack.core.security.authz.permission.Role;
+import org.elasticsearch.xpack.core.security.authz.permission.SimpleRole;
+import org.elasticsearch.xpack.core.security.authz.permission.UnionRole;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
@@ -385,6 +387,40 @@ public class CompositeRolesStore {
             listener.onResponse(Role.EMPTY);
             return;
         }
+
+        final Map<RoleDescriptor.Restriction, List<RoleDescriptor>> roleDescriptorsByRestriction = roleDescriptors.stream()
+            .collect(Collectors.groupingBy(RoleDescriptor::getRestriction));
+
+        final GroupedActionListener<Role> roleGroupedActionListener = new GroupedActionListener<>(
+            roleDescriptorsByRestriction.size(),
+            ActionListener.wrap(roles -> {
+                final UnionRole.Builder roleBuilder = UnionRole.builder();
+                for (Role r : roles) {
+                    if (r instanceof SimpleRole simpleRole) {
+                        roleBuilder.addRole(simpleRole);
+                    } else {
+                        assert false;
+                        listener.onFailure(new IllegalStateException("role building from role descriptor should return simple role"));
+                        return;
+                    }
+                    listener.onResponse(roleBuilder.build());
+                }
+            }, listener::onFailure)
+        );
+
+        roleDescriptorsByRestriction.values()
+            .forEach(
+                rds -> doBuildRoleFromDescriptors(rds, fieldPermissionsCache, privilegeStore, restrictedIndices, roleGroupedActionListener)
+            );
+    }
+
+    private static void doBuildRoleFromDescriptors(
+        Collection<RoleDescriptor> roleDescriptors,
+        FieldPermissionsCache fieldPermissionsCache,
+        NativePrivilegeStore privilegeStore,
+        RestrictedIndices restrictedIndices,
+        ActionListener<Role> listener
+    ) {
 
         final Set<String> clusterPrivileges = new HashSet<>();
         final List<ConfigurableClusterPrivilege> configurableClusterPrivileges = new ArrayList<>();

@@ -18,6 +18,7 @@ import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.regex.Regex;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.xpack.core.security.authz.accesscontrol.FieldSubsetReader;
 import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsDefinition.FieldGrantExcludeGroup;
@@ -210,6 +211,16 @@ public final class FieldPermissions implements Accountable, CacheKey {
             return new FieldPermissions(fieldPermissionsDefinitions, getIncludeAutomaton());
         }
         return FieldPermissions.DEFAULT;
+    }
+
+    private static FieldPermissionsCache fieldPermissionsCache = new FieldPermissionsCache(Settings.EMPTY);
+
+    public static synchronized void setFieldPermissionsCache(FieldPermissionsCache cache) {
+        FieldPermissions.fieldPermissionsCache = Objects.requireNonNull(cache);
+    }
+
+    public FieldPermissions or(FieldPermissions other) {
+        return fieldPermissionsCache.union(List.of(this, other));
     }
 
     /**

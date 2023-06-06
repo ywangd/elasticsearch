@@ -163,6 +163,11 @@ public final class LimitedRole implements Role {
         return new RoleDescriptorsIntersection(Collections.unmodifiableList(mergedIntersection));
     }
 
+    @Override
+    public Role forRestriction(RoleDescriptor.Restriction restriction) {
+        return new LimitedRole(baseRole.forRestriction(restriction), limitedByRole.forRestriction(restriction));
+    }
+
     /**
      * @return A predicate that will match all the indices that this role and the limited by role has the privilege for executing the given
      * action on.

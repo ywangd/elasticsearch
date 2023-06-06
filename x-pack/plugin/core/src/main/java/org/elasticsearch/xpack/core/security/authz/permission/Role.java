@@ -180,6 +180,8 @@ public interface Role {
         return new LimitedRole(this, role);
     }
 
+    Role forRestriction(RoleDescriptor.Restriction restriction);
+
     /**
      * @param restrictedIndices An automaton that can determine whether a string names
      *                          a restricted index. For simple unit tests, this can be

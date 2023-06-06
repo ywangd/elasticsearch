@@ -210,6 +210,12 @@ public class IndicesAccessControl {
             return new IndexAccessControl(constrainedFieldPermissions, constrainedDocumentPermissions);
         }
 
+        public IndexAccessControl or(IndexAccessControl other) {
+            FieldPermissions unionFieldPermissions = getFieldPermissions().or(other.fieldPermissions);
+            DocumentPermissions unionDocumentPermissions = getDocumentPermissions().or(other.getDocumentPermissions());
+            return new IndexAccessControl(unionFieldPermissions, unionDocumentPermissions);
+        }
+
         @Override
         public String toString() {
             return "IndexAccessControl{" + "fieldPermissions=" + fieldPermissions + ", documentPermissions=" + documentPermissions + '}';
@@ -280,6 +286,43 @@ public class IndicesAccessControl {
             return indexPermissionsMap;
         };
         return new IndicesAccessControl(isGranted, limitedIndexPermissions);
+    }
+
+    public IndicesAccessControl or(IndicesAccessControl other) {
+        if (this instanceof AllowAllIndicesAccessControl || other instanceof AllowAllIndicesAccessControl) {
+            return allowAll();
+        }
+
+        final boolean isGranted;
+        if (this.granted == other.granted) {
+            isGranted = this.granted;
+        } else {
+            isGranted = false;
+        }
+
+        final Supplier<Map<String, IndexAccessControl>> unionIndexPermissions = () -> {
+            Set<String> indexes = this.getAllIndexPermissions().keySet();
+            Set<String> otherIndexes = other.getAllIndexPermissions().keySet();
+            Set<String> commonIndexes = Sets.intersection(indexes, otherIndexes);
+
+            Map<String, IndexAccessControl> indexPermissionsMap = Maps.newMapWithExpectedSize(
+                indexes.size() + otherIndexes.size() - commonIndexes.size()
+            );
+            indexes.stream()
+                .filter(idx -> false == commonIndexes.contains(idx))
+                .forEach(idx -> indexPermissionsMap.put(idx, getIndexPermissions(idx)));
+            otherIndexes.stream()
+                .filter(idx -> false == commonIndexes.contains(idx))
+                .forEach(idx -> indexPermissionsMap.put(idx, other.getIndexPermissions(idx)));
+            for (String index : commonIndexes) {
+                IndexAccessControl indexAccessControl = getIndexPermissions(index);
+                IndexAccessControl otherIndexAccessControl = other.getIndexPermissions(index);
+                indexPermissionsMap.put(index, indexAccessControl.or(otherIndexAccessControl));
+            }
+            return indexPermissionsMap;
+        };
+        return new IndicesAccessControl(isGranted, unionIndexPermissions);
+
     }
 
     @Override

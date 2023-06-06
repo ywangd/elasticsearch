@@ -781,6 +781,7 @@ public class Security extends Plugin
         );
         final ReservedRolesStore reservedRolesStore = new ReservedRolesStore();
         RoleDescriptor.setFieldPermissionsCache(fieldPermissionsCache);
+        FieldPermissions.setFieldPermissionsCache(fieldPermissionsCache);
 
         final Map<String, List<BiConsumer<Set<String>, ActionListener<RoleRetrievalResult>>>> customRoleProviders = new LinkedHashMap<>();
         for (SecurityExtension extension : securityExtensions) {

@@ -205,6 +205,12 @@ public class SimpleRole implements Role {
         );
     }
 
+    @Override
+    public Role forRestriction(RoleDescriptor.Restriction restriction) {
+        // TODO: actually compare restriction
+        return this;
+    }
+
     private static Set<FieldPermissionsDefinition.FieldGrantExcludeGroup> getFieldGrantExcludeGroups(IndicesPermission.Group group) {
         if (group.getFieldPermissions().hasFieldLevelSecurity()) {
             final List<FieldPermissionsDefinition> fieldPermissionsDefinitions = group.getFieldPermissions()

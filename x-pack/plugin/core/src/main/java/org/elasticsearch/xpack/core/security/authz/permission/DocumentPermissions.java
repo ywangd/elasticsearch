@@ -229,6 +229,16 @@ public final class DocumentPermissions implements CacheKey {
         }
     }
 
+    public DocumentPermissions or(DocumentPermissions other) {
+        if (false == hasDocumentLevelPermissions() || false == other.hasDocumentLevelPermissions()) {
+            return allowAll();
+        }
+        final Set<BytesReference> queries = new TreeSet<>();
+        queries.addAll(getSingleSetOfQueries());
+        queries.addAll(other.getSingleSetOfQueries());
+        return new DocumentPermissions(queries);
+    }
+
     @Override
     public String toString() {
         return "DocumentPermissions [listOfQueries=" + listOfQueries + "]";
