@@ -16,7 +16,7 @@ import org.elasticsearch.action.admin.indices.rollover.RolloverAction;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsAction;
 import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.transport.TcpTransport;
 import org.elasticsearch.xpack.core.ilm.action.GetLifecycleAction;
 import org.elasticsearch.xpack.core.ilm.action.PutLifecycleAction;
@@ -105,31 +105,14 @@ public class ReservedRolesStore implements BiConsumer<Set<String>, ActionListene
         null
     );
 
-    public static final Setting<List<String>> EXCLUDED_RESERVED_ROLES = Setting.listSetting(
-        "xpack.security.reserved_roles.exclude",
+    public static final Setting<List<String>> INCLUDE_RESERVED_ROLES = Setting.listSetting(
+        "xpack.security.reserved_roles.include",
         List.of(),
         Function.identity(),
         Setting.Property.NodeScope
     );
 
-    private static Set<String> excludedRoleNames = Set.copyOf(EXCLUDED_RESERVED_ROLES.get(Settings.EMPTY));
-
-    public static void setExcludedReservedRoles(List<String> excludedRoleNames) {
-        ReservedRolesStore.excludedRoleNames = Set.copyOf(excludedRoleNames);
-    }
-
-    private static final Map<String, RoleDescriptor> RESERVED_ROLES = initializeReservedRoles();
-
-    private static Map<String, RoleDescriptor> getEffectiveReservedRoles() {
-        if (excludedRoleNames.isEmpty()) {
-            return RESERVED_ROLES;
-        } else {
-            return RESERVED_ROLES.entrySet()
-                .stream()
-                .filter(entry -> false == excludedRoleNames.contains(entry.getKey()))
-                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
-        }
-    }
+    private static Map<String, RoleDescriptor> RESERVED_ROLES;
 
     private static RoleDescriptor.RemoteIndicesPrivileges getRemoteIndicesReadPrivileges(String indexPattern) {
         return new RoleDescriptor.RemoteIndicesPrivileges(
@@ -142,8 +125,8 @@ public class ReservedRolesStore implements BiConsumer<Set<String>, ActionListene
         );
     }
 
-    private static Map<String, RoleDescriptor> initializeReservedRoles() {
-        return MapBuilder.<String, RoleDescriptor>newMapBuilder()
+    private static Map<String, RoleDescriptor> initializeReservedRoles(@Nullable Set<String> includes) {
+        final var roles = MapBuilder.<String, RoleDescriptor>newMapBuilder()
             .put("superuser", SUPERUSER_ROLE_DESCRIPTOR)
             .put(
                 "transport_client",
@@ -618,7 +601,16 @@ public class ReservedRolesStore implements BiConsumer<Set<String>, ActionListene
             )
             .put("viewer", buildViewerRoleDescriptor())
             .put("editor", buildEditorRoleDescriptor())
-            .immutableMap();
+            .map();
+
+        if (includes != null) {
+            return roles.entrySet()
+                .stream()
+                .filter(entry -> includes.contains(entry.getKey()))
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+        } else {
+            return Map.copyOf(roles);
+        }
     }
 
     private static RoleDescriptor buildViewerRoleDescriptor() {
@@ -976,7 +968,18 @@ public class ReservedRolesStore implements BiConsumer<Set<String>, ActionListene
     }
 
     public static boolean isReserved(String role) {
-        return getEffectiveReservedRoles().containsKey(role);
+        if (RESERVED_ROLES == null) {
+            throw new IllegalStateException("ReserveRolesStore not initialized properly");
+        }
+        return RESERVED_ROLES.containsKey(role);
+    }
+
+    public ReservedRolesStore() {
+        this(null);
+    }
+
+    public ReservedRolesStore(@Nullable Set<String> includes) {
+        RESERVED_ROLES = initializeReservedRoles(includes);
     }
 
     public Map<String, Object> usageStats() {
@@ -984,21 +987,24 @@ public class ReservedRolesStore implements BiConsumer<Set<String>, ActionListene
     }
 
     public RoleDescriptor roleDescriptor(String role) {
-        return getEffectiveReservedRoles().get(role);
+        return RESERVED_ROLES.get(role);
     }
 
     public Collection<RoleDescriptor> roleDescriptors() {
-        return getEffectiveReservedRoles().values();
+        return RESERVED_ROLES.values();
     }
 
     public static Set<String> names() {
-        return getEffectiveReservedRoles().keySet();
+        if (RESERVED_ROLES == null) {
+            throw new IllegalStateException("ReserveRolesStore not initialized properly");
+        }
+        return RESERVED_ROLES.keySet();
     }
 
     @Override
     public void accept(Set<String> roleNames, ActionListener<RoleRetrievalResult> listener) {
         final Set<RoleDescriptor> descriptors = roleNames.stream()
-            .map(getEffectiveReservedRoles()::get)
+            .map(RESERVED_ROLES::get)
             .filter(Objects::nonNull)
             .collect(Collectors.toSet());
         listener.onResponse(RoleRetrievalResult.success(descriptors));

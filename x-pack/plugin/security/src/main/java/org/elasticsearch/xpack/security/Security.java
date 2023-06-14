@@ -398,7 +398,7 @@ import static org.elasticsearch.core.Strings.format;
 import static org.elasticsearch.xpack.core.XPackSettings.API_KEY_SERVICE_ENABLED_SETTING;
 import static org.elasticsearch.xpack.core.XPackSettings.HTTP_SSL_ENABLED;
 import static org.elasticsearch.xpack.core.security.SecurityField.FIELD_LEVEL_SECURITY_FEATURE;
-import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore.EXCLUDED_RESERVED_ROLES;
+import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore.INCLUDE_RESERVED_ROLES;
 import static org.elasticsearch.xpack.security.operator.OperatorPrivileges.OPERATOR_PRIVILEGES_ENABLED;
 import static org.elasticsearch.xpack.security.transport.SSLEngineUtils.extractClientCertificates;
 
@@ -788,8 +788,9 @@ public class Security extends Plugin
             systemIndices.getMainIndexManager(),
             clusterService
         );
-        final ReservedRolesStore reservedRolesStore = new ReservedRolesStore();
-        ReservedRolesStore.setExcludedReservedRoles(EXCLUDED_RESERVED_ROLES.get(environment.settings()));
+        final ReservedRolesStore reservedRolesStore = INCLUDE_RESERVED_ROLES.exists(environment.settings())
+            ? new ReservedRolesStore(Set.copyOf(INCLUDE_RESERVED_ROLES.get(environment.settings())))
+            : new ReservedRolesStore(null);
         RoleDescriptor.setFieldPermissionsCache(fieldPermissionsCache);
 
         final Map<String, List<BiConsumer<Set<String>, ActionListener<RoleRetrievalResult>>>> customRoleProviders = new LinkedHashMap<>();
@@ -1150,7 +1151,7 @@ public class Security extends Plugin
             }
             builder.put(SecuritySettings.addUserSettings(settings));
             // TODO: move to the serverless package
-            builder.putList(EXCLUDED_RESERVED_ROLES.getKey(), "viewer", "editor");
+            builder.putList(INCLUDE_RESERVED_ROLES.getKey(), "superuser");
             return builder.build();
         } else {
             return Settings.EMPTY;
@@ -1211,7 +1212,7 @@ public class Security extends Plugin
         // hide settings
         settingsList.add(Setting.stringListSetting(SecurityField.setting("hide_settings"), Property.NodeScope, Property.Filtered));
         // TODO: move to the serverless package
-        settingsList.add(EXCLUDED_RESERVED_ROLES);
+        settingsList.add(INCLUDE_RESERVED_ROLES);
         return settingsList;
     }
 
