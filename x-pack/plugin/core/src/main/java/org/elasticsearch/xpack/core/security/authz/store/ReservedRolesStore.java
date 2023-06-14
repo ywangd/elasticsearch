@@ -978,8 +978,8 @@ public class ReservedRolesStore implements BiConsumer<Set<String>, ActionListene
         this(null);
     }
 
-    public ReservedRolesStore(@Nullable Set<String> includes) {
-        RESERVED_ROLES = initializeReservedRoles(includes);
+    public ReservedRolesStore(@Nullable List<String> includes) {
+        RESERVED_ROLES = initializeReservedRoles(Set.copyOf(includes));
     }
 
     public Map<String, Object> usageStats() {

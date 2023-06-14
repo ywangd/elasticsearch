@@ -789,8 +789,8 @@ public class Security extends Plugin
             clusterService
         );
         final ReservedRolesStore reservedRolesStore = INCLUDE_RESERVED_ROLES.exists(environment.settings())
-            ? new ReservedRolesStore(Set.copyOf(INCLUDE_RESERVED_ROLES.get(environment.settings())))
-            : new ReservedRolesStore(null);
+            ? new ReservedRolesStore(INCLUDE_RESERVED_ROLES.get(environment.settings()))
+            : new ReservedRolesStore();
         RoleDescriptor.setFieldPermissionsCache(fieldPermissionsCache);
 
         final Map<String, List<BiConsumer<Set<String>, ActionListener<RoleRetrievalResult>>>> customRoleProviders = new LinkedHashMap<>();
