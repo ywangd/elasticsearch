@@ -10,9 +10,11 @@ package org.elasticsearch.xpack.security.apikey;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.common.settings.SecureString;
+import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.core.Tuple;
 import org.elasticsearch.test.rest.ObjectPath;
 import org.elasticsearch.transport.TcpTransport;
+import org.elasticsearch.xcontent.json.JsonXContent;
 import org.elasticsearch.xpack.core.security.authc.support.UsernamePasswordToken;
 import org.elasticsearch.xpack.security.SecurityOnTrialLicenseRestTestCase;
 import org.junit.After;
@@ -24,6 +26,7 @@ import java.util.Set;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.notNullValue;
 
 /**
  * Integration Rest Tests relating to API Keys.
@@ -89,6 +92,29 @@ public class CrossClusterKeyRestIT extends SecurityOnTrialLicenseRestTestCase {
 
         final ObjectPath createResponse = assertOKAndCreateObjectPath(client().performRequest(createRequest));
         final String keyId = createResponse.evaluate("id");
+
+        final ObjectPath fetchResponse = fetchCrossClusterKeyById(keyId);
+        assertThat(fetchResponse.evaluate("cross_cluster_keys.0.access"), equalTo(XContentHelper.convertToMap(JsonXContent.jsonXContent, """
+            {
+                "search": [
+                  {
+                    "names": [
+                      "metrics"
+                    ],
+                    "query": "{\\"term\\":{\\"score\\":42}}",
+                    "allow_restricted_indices": false
+                  }
+                ],
+                "replication": [
+                  {
+                    "names": [
+                      "logs"
+                    ],
+                    "allow_restricted_indices": true
+                  }
+                ]
+
+            }""", false)));
     }
 
     public void testCrossClusterApiKeyDoesNotAllowEmptyAccess() throws IOException {
@@ -157,6 +183,16 @@ public class CrossClusterKeyRestIT extends SecurityOnTrialLicenseRestTestCase {
                 "search": [ {"names": ["logs"]} ]
               }
             }""", "Required [name]");
+    }
+
+    private ObjectPath fetchCrossClusterKeyById(String keyId) throws IOException {
+        final Request fetchRequest;
+        fetchRequest = new Request("GET", "/_security/cross_cluster_key/" + keyId);
+        setUserForRequest(fetchRequest, MANAGE_SECURITY_USER, END_USER_PASSWORD);
+        final ObjectPath fetchResponse = assertOKAndCreateObjectPath(client().performRequest(fetchRequest));
+        assertThat(fetchResponse.evaluate("cross_cluster_keys.0.id"), equalTo(keyId));
+        assertThat(fetchResponse.evaluate("cross_cluster_keys.0.access"), notNullValue());
+        return fetchResponse;
     }
 
     private void assertBadCreateCrossClusterApiKeyRequest(String body, String expectedErrorMessage) throws IOException {

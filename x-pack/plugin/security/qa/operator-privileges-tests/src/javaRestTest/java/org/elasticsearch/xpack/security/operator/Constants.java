@@ -212,6 +212,7 @@ public class Constants {
         "cluster:admin/xpack/security/cache/clear",
         TcpTransport.isUntrustedRemoteClusterEnabled() ? "cluster:admin/xpack/security/cross_cluster/api_key/create" : null,
         TcpTransport.isUntrustedRemoteClusterEnabled() ? "cluster:admin/xpack/security/cross_cluster_key/create" : null,
+        TcpTransport.isUntrustedRemoteClusterEnabled() ? "cluster:admin/xpack/security/cross_cluster_key/get" : null,
         TcpTransport.isUntrustedRemoteClusterEnabled() ? "cluster:admin/xpack/security/cross_cluster/api_key/update" : null,
         "cluster:admin/xpack/security/delegate_pki",
         "cluster:admin/xpack/security/enroll/node",

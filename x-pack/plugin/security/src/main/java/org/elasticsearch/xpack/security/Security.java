@@ -120,6 +120,7 @@ import org.elasticsearch.xpack.core.security.action.apikey.CreateApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateCrossClusterApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateCrossClusterKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.GetApiKeyAction;
+import org.elasticsearch.xpack.core.security.action.apikey.GetCrossClusterKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.GrantApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.InvalidateApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.QueryApiKeyAction;
@@ -206,6 +207,7 @@ import org.elasticsearch.xpack.security.action.apikey.TransportCreateApiKeyActio
 import org.elasticsearch.xpack.security.action.apikey.TransportCreateCrossClusterApiKeyAction;
 import org.elasticsearch.xpack.security.action.apikey.TransportCreateCrossClusterKeyAction;
 import org.elasticsearch.xpack.security.action.apikey.TransportGetApiKeyAction;
+import org.elasticsearch.xpack.security.action.apikey.TransportGetCrossClusterKeyAction;
 import org.elasticsearch.xpack.security.action.apikey.TransportGrantApiKeyAction;
 import org.elasticsearch.xpack.security.action.apikey.TransportInvalidateApiKeyAction;
 import org.elasticsearch.xpack.security.action.apikey.TransportQueryApiKeyAction;
@@ -314,6 +316,7 @@ import org.elasticsearch.xpack.security.rest.action.apikey.RestCreateApiKeyActio
 import org.elasticsearch.xpack.security.rest.action.apikey.RestCreateCrossClusterApiKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestCreateCrossClusterKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestGetApiKeyAction;
+import org.elasticsearch.xpack.security.rest.action.apikey.RestGetCrossClusterKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestGrantApiKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestInvalidateApiKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestQueryApiKeyAction;
@@ -1355,6 +1358,9 @@ public class Security extends Plugin
             new ActionHandler<>(GrantApiKeyAction.INSTANCE, TransportGrantApiKeyAction.class),
             new ActionHandler<>(InvalidateApiKeyAction.INSTANCE, TransportInvalidateApiKeyAction.class),
             new ActionHandler<>(GetApiKeyAction.INSTANCE, TransportGetApiKeyAction.class),
+            TcpTransport.isUntrustedRemoteClusterEnabled()
+                ? new ActionHandler<>(GetCrossClusterKeyAction.INSTANCE, TransportGetCrossClusterKeyAction.class)
+                : null,
             new ActionHandler<>(QueryApiKeyAction.INSTANCE, TransportQueryApiKeyAction.class),
             new ActionHandler<>(UpdateApiKeyAction.INSTANCE, TransportUpdateApiKeyAction.class),
             new ActionHandler<>(BulkUpdateApiKeyAction.INSTANCE, TransportBulkUpdateApiKeyAction.class),
@@ -1446,6 +1452,7 @@ public class Security extends Plugin
             new RestGrantApiKeyAction(settings, getLicenseState()),
             new RestInvalidateApiKeyAction(settings, getLicenseState()),
             new RestGetApiKeyAction(settings, getLicenseState()),
+            TcpTransport.isUntrustedRemoteClusterEnabled() ? new RestGetCrossClusterKeyAction(settings, getLicenseState()) : null,
             new RestQueryApiKeyAction(settings, getLicenseState()),
             new RestDelegatePkiAuthenticationAction(settings, getLicenseState()),
             new RestCreateServiceAccountTokenAction(settings, getLicenseState()),

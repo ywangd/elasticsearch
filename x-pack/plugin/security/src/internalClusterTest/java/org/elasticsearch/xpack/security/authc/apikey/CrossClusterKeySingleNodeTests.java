@@ -18,12 +18,17 @@ import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateCrossClusterApiKeyRequest;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateCrossClusterKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateCrossClusterKeyResponse;
+import org.elasticsearch.xpack.core.security.action.apikey.CrossClusterKey;
+import org.elasticsearch.xpack.core.security.action.apikey.GetApiKeyRequest;
+import org.elasticsearch.xpack.core.security.action.apikey.GetCrossClusterKeyAction;
+import org.elasticsearch.xpack.core.security.action.apikey.GetCrossClusterKeyResponse;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
 
 import java.io.IOException;
 import java.util.Map;
 
 import static org.elasticsearch.xpack.security.support.SecuritySystemIndices.SECURITY_MAIN_ALIAS;
+import static org.hamcrest.Matchers.arrayWithSize;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -76,19 +81,15 @@ public class CrossClusterKeySingleNodeTests extends SecuritySingleNodeTestCase {
         );
         assertThat(actualRoleDescriptor, equalTo(expectedRoleDescriptor));
 
-        // // Check the API key attributes with Get API
-        // final GetApiKeyResponse getApiKeyResponse = client().execute(
-        // GetApiKeyAction.INSTANCE,
-        // GetApiKeyRequest.builder().apiKeyId(keyId).withLimitedBy(randomBoolean()).build()
-        // ).actionGet();
-        // assertThat(getApiKeyResponse.getApiKeyInfos(), arrayWithSize(1));
-        // final ApiKey getApiKeyInfo = getApiKeyResponse.getApiKeyInfos()[0];
-        // assertThat(getApiKeyInfo.getType(), is(ApiKey.Type.CROSS_CLUSTER));
-        // assertThat(getApiKeyInfo.getRoleDescriptors(), contains(expectedRoleDescriptor));
-        // assertThat(getApiKeyInfo.getLimitedBy(), nullValue());
-        // assertThat(getApiKeyInfo.getMetadata(), anEmptyMap());
-        // assertThat(getApiKeyInfo.getUsername(), equalTo("test_user"));
-        // assertThat(getApiKeyInfo.getRealm(), equalTo("file"));
+        // Check the cross cluster key attributes with Get API
+        final GetCrossClusterKeyResponse getCrossClusterKeyResponse = client().execute(
+            GetCrossClusterKeyAction.INSTANCE,
+            GetApiKeyRequest.builder().apiKeyId(keyId).build()
+        ).actionGet();
+        assertThat(getCrossClusterKeyResponse.getCrossClusterKeysInfo(), arrayWithSize(1));
+        final CrossClusterKey crossClusterKeyInfo = getCrossClusterKeyResponse.getCrossClusterKeysInfo()[0];
+        assertThat(crossClusterKeyInfo.id(), equalTo(keyId));
+        assertThat(crossClusterKeyInfo.roleDescriptors(), contains(expectedRoleDescriptor));
     }
 
     private Map<String, Object> getCrossClusterKeyDocument(String keyId) {

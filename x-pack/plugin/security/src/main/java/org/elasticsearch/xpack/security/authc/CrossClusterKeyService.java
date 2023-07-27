@@ -75,7 +75,8 @@ import org.elasticsearch.xpack.core.security.action.apikey.BaseBulkUpdateApiKeyR
 import org.elasticsearch.xpack.core.security.action.apikey.BaseUpdateApiKeyRequest;
 import org.elasticsearch.xpack.core.security.action.apikey.BulkUpdateApiKeyResponse;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateCrossClusterKeyResponse;
-import org.elasticsearch.xpack.core.security.action.apikey.GetApiKeyResponse;
+import org.elasticsearch.xpack.core.security.action.apikey.CrossClusterKey;
+import org.elasticsearch.xpack.core.security.action.apikey.GetCrossClusterKeyResponse;
 import org.elasticsearch.xpack.core.security.action.apikey.InvalidateApiKeyResponse;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
@@ -246,7 +247,7 @@ public class CrossClusterKeyService {
                 bulkRequestBuilder.add(
                     client.prepareIndex(SECURITY_MAIN_ALIAS)
                         .setSource(builder)
-                        .setId(computeDocId(request.getId()))
+                        .setId(keyIdToDocId(request.getId()))
                         .setOpType(DocWriteRequest.OpType.CREATE)
                         .request()
                 );
@@ -261,7 +262,7 @@ public class CrossClusterKeyService {
                         BulkAction.INSTANCE,
                         bulkRequest,
                         TransportBulkAction.<IndexResponse>unwrappingSingleItemBulkResponse(ActionListener.wrap(indexResponse -> {
-                            assert computeDocId(request.getId()).equals(indexResponse.getId());
+                            assert keyIdToDocId(request.getId()).equals(indexResponse.getId());
                             assert indexResponse.getResult() == DocWriteResponse.Result.CREATED;
                             final ListenableFuture<CachedCrossClusterKeyHashResult> listenableFuture = new ListenableFuture<>();
                             listenableFuture.onResponse(new CachedCrossClusterKeyHashResult(true, secret));
@@ -278,8 +279,13 @@ public class CrossClusterKeyService {
         }));
     }
 
-    private String computeDocId(String keyId) {
+    private static String keyIdToDocId(String keyId) {
         return "cross_cluster_key_" + keyId;
+    }
+
+    private static String docIdToKeyId(String docId) {
+        assert docId.startsWith("cross_cluster_key_");
+        return docId.substring("cross_cluster_key_".length());
     }
 
     public void updateCrossClusterKeys(
@@ -777,7 +783,7 @@ public class CrossClusterKeyService {
         return isNoop
             ? null
             : client.prepareIndex(SECURITY_MAIN_ALIAS)
-                .setId(currentVersionedDoc.id())
+                .setId(keyIdToDocId(currentVersionedDoc.id()))
                 .setSource(builder)
                 .setIfSeqNo(currentVersionedDoc.seqNo())
                 .setIfPrimaryTerm(currentVersionedDoc.primaryTerm())
@@ -905,7 +911,8 @@ public class CrossClusterKeyService {
             }
             if (crossClusterKeyIds != null && crossClusterKeyIds.length > 0) {
                 boolQuery.filter(
-                    QueryBuilders.idsQuery().addIds(Arrays.stream(crossClusterKeyIds).map(this::computeDocId).toArray(String[]::new))
+                    QueryBuilders.idsQuery()
+                        .addIds(Arrays.stream(crossClusterKeyIds).map(CrossClusterKeyService::keyIdToDocId).toArray(String[]::new))
                 );
             }
 
@@ -1109,14 +1116,14 @@ public class CrossClusterKeyService {
      * @param username user name
      * @param crossClusterKeyName cross cluster key name
      * @param crossClusterKeyIds cross cluster key ids
-     * @param listener listener for {@link GetApiKeyResponse}
+     * @param listener listener for {@link GetCrossClusterKeyResponse}
      */
     public void getCrossClusterKeys(
         String[] realmNames,
         String username,
         String crossClusterKeyName,
         String[] crossClusterKeyIds,
-        ActionListener<GetApiKeyResponse> listener
+        ActionListener<GetCrossClusterKeyResponse> listener
     ) {
         findCrossClusterKeysForUserRealmCrossClusterKeyIdAndNameCombination(
             crossClusterKeyName,
@@ -1132,10 +1139,9 @@ public class CrossClusterKeyService {
                         crossClusterKeyName,
                         Arrays.toString(crossClusterKeyIds)
                     );
-                    listener.onResponse(GetApiKeyResponse.emptyResponse());
+                    listener.onResponse(new GetCrossClusterKeyResponse(List.of()));
                 } else {
-                    // TODO: return crossClusterKeyInfos when the types are compatible
-                    listener.onResponse(new GetApiKeyResponse(List.of()));
+                    listener.onResponse(new GetCrossClusterKeyResponse(crossClusterKeyInfos));
                 }
             }, listener::onFailure)
         );
@@ -1143,7 +1149,7 @@ public class CrossClusterKeyService {
 
     private CrossClusterKey convertSearchHitToCrossClusterKeyInfo(SearchHit hit) {
         final CrossClusterKeyDoc crossClusterKeyDoc = convertSearchHitToVersionedCrossClusterKeyDoc(hit).doc;
-        final String crossClusterKeyId = hit.getId();
+        final String crossClusterKeyId = docIdToKeyId(hit.getId());
 
         final List<RoleDescriptor> roleDescriptors = parseRoleDescriptorsBytes(crossClusterKeyId, crossClusterKeyDoc.roleDescriptorsBytes);
 
@@ -1156,7 +1162,7 @@ public class CrossClusterKeyService {
         ) {
             return new VersionedCrossClusterKeyDoc(
                 CrossClusterKeyDoc.fromXContent(parser),
-                hit.getId(),
+                docIdToKeyId(hit.getId()),
                 hit.getSeqNo(),
                 hit.getPrimaryTerm()
             );
@@ -1180,9 +1186,6 @@ public class CrossClusterKeyService {
             return hash != null && cacheHasher.verify(password, hash);
         }
     }
-
-    // TODO: temporary, to be removed.
-    public record CrossClusterKey(String name, String id, List<RoleDescriptor> descriptor) {}
 
     public static final class CrossClusterKeyDoc {
 
