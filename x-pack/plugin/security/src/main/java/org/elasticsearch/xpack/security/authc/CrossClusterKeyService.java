@@ -71,6 +71,7 @@ import org.elasticsearch.xpack.core.security.action.ClearSecurityCacheAction;
 import org.elasticsearch.xpack.core.security.action.ClearSecurityCacheRequest;
 import org.elasticsearch.xpack.core.security.action.ClearSecurityCacheResponse;
 import org.elasticsearch.xpack.core.security.action.apikey.AbstractCreateApiKeyRequest;
+import org.elasticsearch.xpack.core.security.action.apikey.ApiKey;
 import org.elasticsearch.xpack.core.security.action.apikey.BaseBulkUpdateApiKeyRequest;
 import org.elasticsearch.xpack.core.security.action.apikey.BaseUpdateApiKeyRequest;
 import org.elasticsearch.xpack.core.security.action.apikey.BulkUpdateApiKeyResponse;
@@ -451,7 +452,7 @@ public class CrossClusterKeyService {
         CrossClusterKeyCredentials credentials,
         ActionListener<AuthenticationResult<User>> listener
     ) {
-        final String docId = credentials.getId();
+        final String docId = keyIdToDocId(credentials.getId());
 
         Consumer<CrossClusterKeyDoc> validator = crossClusterKeyDoc -> validateCrossClusterKeyCredentials(
             docId,
@@ -586,7 +587,7 @@ public class CrossClusterKeyService {
                         if (result.success) {
                             if (result.verify(credentials.getKey())) {
                                 // move on
-                                validateCrossClusterKeyTypeAndExpiration(crossClusterKeyDoc, credentials, listener);
+                                validateCrossClusterKey(crossClusterKeyDoc, credentials, listener);
                             } else {
                                 listener.onResponse(
                                     AuthenticationResult.unsuccessful(
@@ -612,7 +613,7 @@ public class CrossClusterKeyService {
                         listenableCacheEntry.onResponse(new CachedCrossClusterKeyHashResult(verified, credentials.getKey()));
                         if (verified) {
                             // move on
-                            validateCrossClusterKeyTypeAndExpiration(crossClusterKeyDoc, credentials, listener);
+                            validateCrossClusterKey(crossClusterKeyDoc, credentials, listener);
                         } else {
                             listener.onResponse(
                                 AuthenticationResult.unsuccessful(
@@ -627,7 +628,7 @@ public class CrossClusterKeyService {
                 verifyKeyAgainstHash(crossClusterKeyDoc.hash, credentials, ActionListener.wrap(verified -> {
                     if (verified) {
                         // move on
-                        validateCrossClusterKeyTypeAndExpiration(crossClusterKeyDoc, credentials, listener);
+                        validateCrossClusterKey(crossClusterKeyDoc, credentials, listener);
                     } else {
                         listener.onResponse(
                             AuthenticationResult.unsuccessful(
@@ -642,22 +643,35 @@ public class CrossClusterKeyService {
     }
 
     // package-private for testing
-    static void validateCrossClusterKeyTypeAndExpiration(
+    static void validateCrossClusterKey(
         CrossClusterKeyDoc crossClusterKeyDoc,
         CrossClusterKeyCredentials credentials,
         ActionListener<AuthenticationResult<User>> listener
     ) {
         final Map<String, Object> authResultMetadata = new HashMap<>();
+        // TODO: use different metadata keys
         authResultMetadata.put(AuthenticationField.API_KEY_ROLE_DESCRIPTORS_KEY, crossClusterKeyDoc.roleDescriptorsBytes);
         authResultMetadata.put(AuthenticationField.API_KEY_ID_KEY, credentials.getId());
         authResultMetadata.put(AuthenticationField.API_KEY_NAME_KEY, crossClusterKeyDoc.name);
-        listener.onResponse(AuthenticationResult.success(new User("cross_cluster:" + credentials.getId()), authResultMetadata));
+        authResultMetadata.put(AuthenticationField.API_KEY_TYPE_KEY, ApiKey.Type.CROSS_CLUSTER.value());
+        listener.onResponse(AuthenticationResult.success(new User("cross_cluster_key/" + credentials.getId()), authResultMetadata));
+    }
+
+    static CrossClusterKeyCredentials getCredentialsFromHeader(String header) {
+        return parseCrossClusterKey(Authenticator.extractCredentialFromHeaderValue(header, "ApiKey"));
     }
 
     private static CrossClusterKeyCredentials parseCrossClusterKey(SecureString crossClusterKeyString) {
         if (crossClusterKeyString != null) {
+            if (false == (crossClusterKeyString.charAt(0) == 'c'
+                && crossClusterKeyString.charAt(1) == 'c'
+                && crossClusterKeyString.charAt(2) == '_')) {
+                throw new IllegalArgumentException("invalid cross cluster key prefix");
+            }
             final byte[] decodedCrossClusterKeyCredBytes = Base64.getDecoder()
-                .decode(CharArrays.toUtf8Bytes(crossClusterKeyString.getChars()));
+                .decode(
+                    CharArrays.toUtf8Bytes(Arrays.copyOfRange(crossClusterKeyString.getChars(), 3, crossClusterKeyString.getChars().length))
+                );
             char[] crossClusterKeyCredChars = null;
             try {
                 crossClusterKeyCredChars = CharArrays.utf8BytesToChars(decodedCrossClusterKeyCredBytes);

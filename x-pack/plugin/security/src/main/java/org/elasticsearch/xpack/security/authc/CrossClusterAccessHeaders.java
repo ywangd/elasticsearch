@@ -9,8 +9,10 @@ package org.elasticsearch.xpack.security.authc;
 
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.xpack.core.security.action.apikey.ApiKey;
+import org.elasticsearch.xpack.core.security.authc.AuthenticationToken;
 import org.elasticsearch.xpack.core.security.authc.CrossClusterAccessSubjectInfo;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.Objects;
 
@@ -40,24 +42,50 @@ public final class CrossClusterAccessHeaders {
         }
         // Invoke parsing logic to validate that the header decodes to a valid API key credential
         // Call `close` since the returned value is an auto-closable
-        parseCredentialsHeader(credentialsHeader).close();
+        final AuthenticationToken authenticationToken = parseCredentialsHeader(credentialsHeader);
+        if (authenticationToken instanceof Closeable closeable) {
+            closeable.close();
+        }
         return new CrossClusterAccessHeaders(credentialsHeader, CrossClusterAccessSubjectInfo.readFromContext(ctx));
     }
 
     public ApiKeyService.ApiKeyCredentials credentials() {
-        return parseCredentialsHeader(credentialsHeader);
+        final AuthenticationToken authenticationToken = parseCredentialsHeader(credentialsHeader);
+        return authenticationToken instanceof ApiKeyService.ApiKeyCredentials
+            ? (ApiKeyService.ApiKeyCredentials) authenticationToken
+            : null;
     }
 
-    private static ApiKeyService.ApiKeyCredentials parseCredentialsHeader(final String header) {
-        try {
-            return Objects.requireNonNull(ApiKeyService.getCredentialsFromHeader(header, ApiKey.Type.CROSS_CLUSTER));
-        } catch (Exception ex) {
-            throw new IllegalArgumentException(
-                "cross cluster access header ["
-                    + CROSS_CLUSTER_ACCESS_CREDENTIALS_HEADER_KEY
-                    + "] value must be a valid API key credential",
-                ex
-            );
+    public CrossClusterKeyService.CrossClusterKeyCredentials crossClusterKeycredentials() {
+        final AuthenticationToken authenticationToken = parseCredentialsHeader(credentialsHeader);
+        return authenticationToken instanceof CrossClusterKeyService.CrossClusterKeyCredentials
+            ? (CrossClusterKeyService.CrossClusterKeyCredentials) authenticationToken
+            : null;
+    }
+
+    private static AuthenticationToken parseCredentialsHeader(final String header) {
+        if (header.startsWith("ApiKey cc_")) {
+            try {
+                return Objects.requireNonNull(CrossClusterKeyService.getCredentialsFromHeader(header));
+            } catch (Exception ex) {
+                throw new IllegalArgumentException(
+                    "cross cluster access header ["
+                        + CROSS_CLUSTER_ACCESS_CREDENTIALS_HEADER_KEY
+                        + "] value must be a valid cross cluster key credential",
+                    ex
+                );
+            }
+        } else {
+            try {
+                return Objects.requireNonNull(ApiKeyService.getCredentialsFromHeader(header, ApiKey.Type.CROSS_CLUSTER));
+            } catch (Exception ex) {
+                throw new IllegalArgumentException(
+                    "cross cluster access header ["
+                        + CROSS_CLUSTER_ACCESS_CREDENTIALS_HEADER_KEY
+                        + "] value must be a valid API key credential",
+                    ex
+                );
+            }
         }
     }
 

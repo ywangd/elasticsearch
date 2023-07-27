@@ -148,6 +148,31 @@ public abstract class AbstractRemoteClusterSecurityTestCase extends ESRestTestCa
         }
     }
 
+    protected static Map<String, Object> createCrossClusterAccessKey(String accessJson) {
+        initFulfillingClusterClient();
+        return createCrossClusterAccessKey(fulfillingClusterClient, accessJson);
+    }
+
+    protected static Map<String, Object> createCrossClusterAccessKey(RestClient targetClusterClient, String accessJson) {
+        // Create cross cluster key on FC
+        final var createCrossClusterApiKeyRequest = new Request("POST", "/_security/cross_cluster_key");
+        createCrossClusterApiKeyRequest.setJsonEntity(Strings.format("""
+            {
+              "name": "cross_cluster_access_key",
+              "access": %s
+            }""", accessJson));
+        try {
+            final Response createCrossClusterApiKeyResponse = performRequestWithAdminUser(
+                targetClusterClient,
+                createCrossClusterApiKeyRequest
+            );
+            assertOK(createCrossClusterApiKeyResponse);
+            return responseAsMap(createCrossClusterApiKeyResponse);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     protected void configureRemoteCluster() throws Exception {
         configureRemoteCluster(fulfillingCluster, randomBoolean());
     }

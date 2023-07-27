@@ -14,7 +14,9 @@ import org.elasticsearch.TransportVersion;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ContextPreservingActionListener;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.node.Node;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.ClientHelper;
 import org.elasticsearch.xpack.core.security.action.apikey.ApiKey;
@@ -34,16 +36,31 @@ public class CrossClusterAccessAuthenticationService {
 
     private static final Logger logger = LogManager.getLogger(CrossClusterAccessAuthenticationService.class);
 
+    private final String nodeName;
     private final ClusterService clusterService;
+    private final CrossClusterKeyService crossClusterKeyService;
     private final ApiKeyService apiKeyService;
     private final AuthenticationService authenticationService;
 
+    // TODO: temporary for removal later
     public CrossClusterAccessAuthenticationService(
         ClusterService clusterService,
         ApiKeyService apiKeyService,
         AuthenticationService authenticationService
     ) {
+        this(Settings.EMPTY, clusterService, null, apiKeyService, authenticationService);
+    }
+
+    public CrossClusterAccessAuthenticationService(
+        Settings settings,
+        ClusterService clusterService,
+        CrossClusterKeyService crossClusterKeyService,
+        ApiKeyService apiKeyService,
+        AuthenticationService authenticationService
+    ) {
+        this.nodeName = Node.NODE_NAME_SETTING.get(settings);
         this.clusterService = clusterService;
+        this.crossClusterKeyService = crossClusterKeyService;
         this.apiKeyService = apiKeyService;
         this.authenticationService = authenticationService;
     }
@@ -57,6 +74,17 @@ public class CrossClusterAccessAuthenticationService {
             // parse and add as authentication token as early as possible so that failure events in audit log include API key ID
             crossClusterAccessHeaders = CrossClusterAccessHeaders.readFromContext(threadContext);
             final ApiKeyService.ApiKeyCredentials apiKeyCredentials = crossClusterAccessHeaders.credentials();
+
+            if (apiKeyCredentials == null) {
+                authenticateCrossClusterKey(
+                    authcContext,
+                    crossClusterAccessHeaders,
+                    crossClusterAccessHeaders.crossClusterKeycredentials(),
+                    listener
+                );
+                return;
+            }
+
             assert ApiKey.Type.CROSS_CLUSTER == apiKeyCredentials.getExpectedType();
             authcContext.addAuthenticationToken(apiKeyCredentials);
             apiKeyService.ensureEnabled();
@@ -89,6 +117,7 @@ public class CrossClusterAccessAuthenticationService {
                 List.of(CROSS_CLUSTER_ACCESS_CREDENTIALS_HEADER_KEY, CROSS_CLUSTER_ACCESS_SUBJECT_INFO_HEADER_KEY)
             )
         ) {
+            logger.info("authenticating old cross-cluster API key");
             final Supplier<ThreadContext.StoredContext> storedContextSupplier = threadContext.newRestorableContext(false);
             authenticationService.authenticate(
                 authcContext,
@@ -102,6 +131,52 @@ public class CrossClusterAccessAuthenticationService {
                         writeAuthToContext(authcContext, authentication.toCrossClusterAccess(subjectInfo), listener);
                     } catch (Exception ex) {
                         withRequestProcessingFailure(authcContext, ex, listener);
+                    }
+                }, listener::onFailure))
+            );
+        }
+    }
+
+    void authenticateCrossClusterKey(
+        Authenticator.Context authcContext,
+        CrossClusterAccessHeaders crossClusterAccessHeaders,
+        CrossClusterKeyService.CrossClusterKeyCredentials crossClusterKeyCredentials,
+        ActionListener<Authentication> listener
+    ) {
+        logger.info("authenticating new cross-cluster key [{}]", crossClusterKeyCredentials.getId());
+        final ThreadContext threadContext = authcContext.getThreadContext();
+        // This is ensured by CrossClusterAccessServerTransportFilter -- validating for internal consistency here
+        assert threadContext.getHeaders().keySet().stream().noneMatch(ClientHelper.SECURITY_HEADER_FILTERS::contains);
+        try (
+            ThreadContext.StoredContext ignored = threadContext.newStoredContext(
+                Collections.emptyList(),
+                // drop cross cluster access authentication headers since we've read their values, and we want to maintain the invariant
+                // that either the cross cluster access subject info header is in the context, or the authentication header, but not both
+                List.of(CROSS_CLUSTER_ACCESS_CREDENTIALS_HEADER_KEY, CROSS_CLUSTER_ACCESS_SUBJECT_INFO_HEADER_KEY)
+            )
+        ) {
+            final Supplier<ThreadContext.StoredContext> storedContextSupplier = threadContext.newRestorableContext(false);
+
+            crossClusterKeyService.tryAuthenticate(
+                threadContext,
+                crossClusterKeyCredentials,
+                new ContextPreservingActionListener<>(storedContextSupplier, ActionListener.wrap(authenticationResult -> {
+                    if (authenticationResult.isAuthenticated()) {
+                        // try-catch so any failure here is wrapped by `withRequestProcessingFailure`, whereas `authenticate` failures are
+                        // not
+                        // we should _not_ wrap `authenticate` failures since this produces duplicate audit events
+                        try {
+                            final CrossClusterAccessSubjectInfo subjectInfo = crossClusterAccessHeaders.getCleanAndValidatedSubjectInfo();
+                            writeAuthToContext(
+                                authcContext,
+                                Authentication.newCrossClusterAccessAuthentication(authenticationResult, subjectInfo, nodeName),
+                                listener
+                            );
+                        } catch (Exception ex) {
+                            withRequestProcessingFailure(authcContext, ex, listener);
+                        }
+                    } else {
+                        withRequestProcessingFailure(authcContext, authenticationResult.getException(), listener);
                     }
                 }, listener::onFailure))
             );

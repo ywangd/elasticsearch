@@ -1006,7 +1006,9 @@ public class Security extends Plugin
 
         DestructiveOperations destructiveOperations = new DestructiveOperations(settings, clusterService.getClusterSettings());
         final CrossClusterAccessAuthenticationService crossClusterAccessAuthcService = new CrossClusterAccessAuthenticationService(
+            settings,
             clusterService,
+            crossClusterKeyService,
             apiKeyService,
             authcService.get()
         );

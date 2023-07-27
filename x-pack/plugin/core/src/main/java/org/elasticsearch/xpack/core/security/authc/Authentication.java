@@ -1269,6 +1269,23 @@ public final class Authentication implements ToXContentObject {
         );
     }
 
+    public static Authentication newCrossClusterAccessAuthentication(
+        AuthenticationResult<User> authenticationResult,
+        CrossClusterAccessSubjectInfo crossClusterAccessSubjectInfo,
+        String nodeName
+    ) {
+        final Authentication.RealmRef authenticatedBy = newCrossClusterAccessRealmRef(nodeName);
+        return new Authentication(
+            new Subject(
+                authenticationResult.getValue(),
+                authenticatedBy,
+                TransportVersion.current(),
+                crossClusterAccessSubjectInfo.copyWithCrossClusterAccessEntries(authenticationResult.getMetadata())
+            ),
+            AuthenticationType.API_KEY
+        );
+    }
+
     // pkg-private for testing
     static RealmRef maybeRewriteRealmRef(TransportVersion streamVersion, RealmRef realmRef) {
         if (realmRef != null && realmRef.getDomain() != null && streamVersion.before(VERSION_REALM_DOMAINS)) {

@@ -72,7 +72,7 @@ public class RemoteClusterSecurityRestIT extends AbstractRemoteClusterSecurityTe
             .setting("xpack.security.authc.token.enabled", "true")
             .keystore("cluster.remote.my_remote_cluster.credentials", () -> {
                 if (API_KEY_MAP_REF.get() == null) {
-                    final Map<String, Object> apiKeyMap = createCrossClusterAccessApiKey("""
+                    final Map<String, Object> apiKeyMap = createCrossClusterAccessKey("""
                         {
                           "search": [
                             {
@@ -240,7 +240,9 @@ public class RemoteClusterSecurityRestIT extends AbstractRemoteClusterSecurityTe
                     "action [indices:data/read/search] towards remote cluster is unauthorized for user [remote_search_user] "
                         + "with assigned roles [remote_search] authenticated by API key id ["
                         + crossClusterAccessApiKeyId
-                        + "] of user [test_user] on indices [index2]"
+                        + "] of user [cross_cluster_key/"
+                        + crossClusterAccessApiKeyId
+                        + "] on indices [index2]"
                 )
             );
 
@@ -256,7 +258,9 @@ public class RemoteClusterSecurityRestIT extends AbstractRemoteClusterSecurityTe
                     "action [indices:data/read/search] towards remote cluster is unauthorized for user [remote_search_user] "
                         + "with assigned roles [remote_search] authenticated by API key id ["
                         + crossClusterAccessApiKeyId
-                        + "] of user [test_user] on indices [prefixed_index]"
+                        + "] of user [cross_cluster_key/"
+                        + crossClusterAccessApiKeyId
+                        + "] on indices [prefixed_index]"
                 )
             );
 
