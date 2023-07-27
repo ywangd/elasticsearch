@@ -74,7 +74,7 @@ import org.elasticsearch.xpack.core.security.action.apikey.AbstractCreateApiKeyR
 import org.elasticsearch.xpack.core.security.action.apikey.BaseBulkUpdateApiKeyRequest;
 import org.elasticsearch.xpack.core.security.action.apikey.BaseUpdateApiKeyRequest;
 import org.elasticsearch.xpack.core.security.action.apikey.BulkUpdateApiKeyResponse;
-import org.elasticsearch.xpack.core.security.action.apikey.CreateApiKeyResponse;
+import org.elasticsearch.xpack.core.security.action.apikey.CreateCrossClusterKeyResponse;
 import org.elasticsearch.xpack.core.security.action.apikey.GetApiKeyResponse;
 import org.elasticsearch.xpack.core.security.action.apikey.InvalidateApiKeyResponse;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
@@ -229,12 +229,15 @@ public class CrossClusterKeyService {
     public void createCrossClusterKey(
         Authentication authentication,
         AbstractCreateApiKeyRequest request,
-        ActionListener<CreateApiKeyResponse> listener
+        ActionListener<CreateCrossClusterKeyResponse> listener
     ) {
         createCrossClusterKeyAndIndexIt(request, listener);
     }
 
-    private void createCrossClusterKeyAndIndexIt(AbstractCreateApiKeyRequest request, ActionListener<CreateApiKeyResponse> listener) {
+    private void createCrossClusterKeyAndIndexIt(
+        AbstractCreateApiKeyRequest request,
+        ActionListener<CreateCrossClusterKeyResponse> listener
+    ) {
         final SecureString secret = UUIDs.randomBase64UUIDSecureString();
         final Version version = clusterService.state().nodes().getMinNodeVersion();
         computeHashForSecret(secret, listener.delegateFailure((l, secretHashChars) -> {
@@ -243,7 +246,7 @@ public class CrossClusterKeyService {
                 bulkRequestBuilder.add(
                     client.prepareIndex(SECURITY_MAIN_ALIAS)
                         .setSource(builder)
-                        .setId(request.getId())
+                        .setId(computeDocId(request.getId()))
                         .setOpType(DocWriteRequest.OpType.CREATE)
                         .request()
                 );
@@ -258,12 +261,12 @@ public class CrossClusterKeyService {
                         BulkAction.INSTANCE,
                         bulkRequest,
                         TransportBulkAction.<IndexResponse>unwrappingSingleItemBulkResponse(ActionListener.wrap(indexResponse -> {
-                            assert request.getId().equals(indexResponse.getId());
+                            assert computeDocId(request.getId()).equals(indexResponse.getId());
                             assert indexResponse.getResult() == DocWriteResponse.Result.CREATED;
                             final ListenableFuture<CachedCrossClusterKeyHashResult> listenableFuture = new ListenableFuture<>();
                             listenableFuture.onResponse(new CachedCrossClusterKeyHashResult(true, secret));
                             authCache.put(request.getId(), listenableFuture);
-                            listener.onResponse(new CreateApiKeyResponse(request.getName(), request.getId(), secret, null));
+                            listener.onResponse(new CreateCrossClusterKeyResponse(request.getName(), request.getId(), secret));
                         }, listener::onFailure))
                     )
                 );
@@ -273,6 +276,10 @@ public class CrossClusterKeyService {
                 Arrays.fill(secretHashChars, (char) 0);
             }
         }));
+    }
+
+    private String computeDocId(String keyId) {
+        return "cross_cluster_key_" + keyId;
     }
 
     public void updateCrossClusterKeys(
@@ -897,7 +904,9 @@ public class CrossClusterKeyService {
                 }
             }
             if (crossClusterKeyIds != null && crossClusterKeyIds.length > 0) {
-                boolQuery.filter(QueryBuilders.idsQuery().addIds(crossClusterKeyIds));
+                boolQuery.filter(
+                    QueryBuilders.idsQuery().addIds(Arrays.stream(crossClusterKeyIds).map(this::computeDocId).toArray(String[]::new))
+                );
             }
 
             findCrossClusterKeys(boolQuery, hitParser, listener);

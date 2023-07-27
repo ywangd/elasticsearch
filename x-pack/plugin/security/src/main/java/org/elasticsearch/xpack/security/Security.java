@@ -118,6 +118,7 @@ import org.elasticsearch.xpack.core.security.action.DelegatePkiAuthenticationAct
 import org.elasticsearch.xpack.core.security.action.apikey.BulkUpdateApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateCrossClusterApiKeyAction;
+import org.elasticsearch.xpack.core.security.action.apikey.CreateCrossClusterKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.GetApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.GrantApiKeyAction;
 import org.elasticsearch.xpack.core.security.action.apikey.InvalidateApiKeyAction;
@@ -203,6 +204,7 @@ import org.elasticsearch.xpack.security.action.TransportDelegatePkiAuthenticatio
 import org.elasticsearch.xpack.security.action.apikey.TransportBulkUpdateApiKeyAction;
 import org.elasticsearch.xpack.security.action.apikey.TransportCreateApiKeyAction;
 import org.elasticsearch.xpack.security.action.apikey.TransportCreateCrossClusterApiKeyAction;
+import org.elasticsearch.xpack.security.action.apikey.TransportCreateCrossClusterKeyAction;
 import org.elasticsearch.xpack.security.action.apikey.TransportGetApiKeyAction;
 import org.elasticsearch.xpack.security.action.apikey.TransportGrantApiKeyAction;
 import org.elasticsearch.xpack.security.action.apikey.TransportInvalidateApiKeyAction;
@@ -263,6 +265,7 @@ import org.elasticsearch.xpack.security.audit.logfile.LoggingAuditTrail;
 import org.elasticsearch.xpack.security.authc.ApiKeyService;
 import org.elasticsearch.xpack.security.authc.AuthenticationService;
 import org.elasticsearch.xpack.security.authc.CrossClusterAccessAuthenticationService;
+import org.elasticsearch.xpack.security.authc.CrossClusterKeyService;
 import org.elasticsearch.xpack.security.authc.InternalRealms;
 import org.elasticsearch.xpack.security.authc.Realms;
 import org.elasticsearch.xpack.security.authc.TokenService;
@@ -309,6 +312,7 @@ import org.elasticsearch.xpack.security.rest.action.apikey.RestBulkUpdateApiKeyA
 import org.elasticsearch.xpack.security.rest.action.apikey.RestClearApiKeyCacheAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestCreateApiKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestCreateCrossClusterApiKeyAction;
+import org.elasticsearch.xpack.security.rest.action.apikey.RestCreateCrossClusterKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestGetApiKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestGrantApiKeyAction;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestInvalidateApiKeyAction;
@@ -815,6 +819,16 @@ public class Security extends Plugin
             threadPool
         );
         components.add(apiKeyService);
+
+        final CrossClusterKeyService crossClusterKeyService = new CrossClusterKeyService(
+            settings,
+            client,
+            systemIndices.getMainIndexManager(),
+            clusterService,
+            cacheInvalidatorRegistry,
+            threadPool
+        );
+        components.add(crossClusterKeyService);
 
         final IndexServiceAccountTokenStore indexServiceAccountTokenStore = new IndexServiceAccountTokenStore(
             settings,
@@ -1335,6 +1349,9 @@ public class Security extends Plugin
             TcpTransport.isUntrustedRemoteClusterEnabled()
                 ? new ActionHandler<>(CreateCrossClusterApiKeyAction.INSTANCE, TransportCreateCrossClusterApiKeyAction.class)
                 : null,
+            TcpTransport.isUntrustedRemoteClusterEnabled()
+                ? new ActionHandler<>(CreateCrossClusterKeyAction.INSTANCE, TransportCreateCrossClusterKeyAction.class)
+                : null,
             new ActionHandler<>(GrantApiKeyAction.INSTANCE, TransportGrantApiKeyAction.class),
             new ActionHandler<>(InvalidateApiKeyAction.INSTANCE, TransportInvalidateApiKeyAction.class),
             new ActionHandler<>(GetApiKeyAction.INSTANCE, TransportGetApiKeyAction.class),
@@ -1422,6 +1439,7 @@ public class Security extends Plugin
             new RestDeletePrivilegesAction(settings, getLicenseState()),
             new RestCreateApiKeyAction(settings, getLicenseState()),
             TcpTransport.isUntrustedRemoteClusterEnabled() ? new RestCreateCrossClusterApiKeyAction(settings, getLicenseState()) : null,
+            TcpTransport.isUntrustedRemoteClusterEnabled() ? new RestCreateCrossClusterKeyAction(settings, getLicenseState()) : null,
             new RestUpdateApiKeyAction(settings, getLicenseState()),
             new RestBulkUpdateApiKeyAction(settings, getLicenseState()),
             TcpTransport.isUntrustedRemoteClusterEnabled() ? new RestUpdateCrossClusterApiKeyAction(settings, getLicenseState()) : null,
