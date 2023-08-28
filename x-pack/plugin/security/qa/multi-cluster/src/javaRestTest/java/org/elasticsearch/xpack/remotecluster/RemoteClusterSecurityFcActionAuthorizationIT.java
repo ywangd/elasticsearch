@@ -7,6 +7,7 @@
 
 package org.elasticsearch.xpack.remotecluster;
 
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.action.admin.cluster.remote.RemoteClusterNodesAction;
@@ -18,8 +19,13 @@ import org.elasticsearch.client.Response;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.node.VersionInformation;
 import org.elasticsearch.common.UUIDs;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.io.stream.BytesStreamOutput;
+import org.elasticsearch.common.io.stream.RecyclerBytesStreamOutput;
+import org.elasticsearch.common.recycler.Recycler;
 import org.elasticsearch.common.settings.MockSecureSettings;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.PageCacheRecycler;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.core.Strings;
@@ -30,14 +36,18 @@ import org.elasticsearch.test.rest.ObjectPath;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
+import org.elasticsearch.transport.BytesRefRecycler;
 import org.elasticsearch.transport.RemoteClusterService;
 import org.elasticsearch.transport.RemoteConnectionInfo;
+import org.elasticsearch.transport.TestOutboundRequestMessage;
+import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.ccr.action.repositories.ClearCcrRestoreSessionAction;
 import org.elasticsearch.xpack.ccr.action.repositories.ClearCcrRestoreSessionRequest;
 import org.elasticsearch.xpack.ccr.action.repositories.GetCcrRestoreFileChunkAction;
 import org.elasticsearch.xpack.ccr.action.repositories.GetCcrRestoreFileChunkRequest;
 import org.elasticsearch.xpack.ccr.action.repositories.PutCcrRestoreSessionAction;
 import org.elasticsearch.xpack.ccr.action.repositories.PutCcrRestoreSessionRequest;
+import org.elasticsearch.xpack.core.common.socket.SocketAccess;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.CrossClusterAccessSubjectInfo;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
@@ -48,6 +58,13 @@ import org.elasticsearch.xpack.security.authc.CrossClusterAccessHeaders;
 import org.junit.ClassRule;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -419,6 +436,67 @@ public class RemoteClusterSecurityFcActionAuthorizationIT extends ESRestTestCase
                         + "[view_index_metadata,manage,read,all]"
                 )
             );
+        }
+    }
+
+    public void testConnectionWorksForPing() throws Exception {
+        final String remoteClusterServerEndpoint = testCluster.getRemoteClusterServerEndpoint(0);
+        final URI uri = new URI("tcp://" + remoteClusterServerEndpoint);
+
+        try (var clientSocket = new Socket()) {
+            SocketAccess.doPrivileged(() -> clientSocket.connect(new InetSocketAddress(uri.getHost(), uri.getPort())));
+            final OutputStream outputStream = clientSocket.getOutputStream();
+            final InputStream inputStream = clientSocket.getInputStream();
+
+            final BytesStreamOutput bytesStreamOutput = new BytesStreamOutput();
+            bytesStreamOutput.writeBytes(new byte[] { (byte) 'E', (byte) 'S' });
+            bytesStreamOutput.writeInt(-1);
+            final byte[] pingBytes = Arrays.copyOfRange(bytesStreamOutput.bytes().array(), 0, 6);
+            outputStream.write(pingBytes);
+            outputStream.flush();
+
+            // We should receive the ping back
+            final byte[] responseBytes = inputStream.readNBytes(6);
+            assertThat(responseBytes, equalTo(pingBytes));
+
+            try {
+                clientSocket.setSoTimeout(500);
+                inputStream.read();
+                fail("should not reach here");
+            } catch (SocketTimeoutException e) {
+                // timeout exception means the server is still connected. Just no data is coming which is normal
+            }
+        }
+    }
+
+    public void testConnectionDisconnectedForHeaderValidationFailure() throws Exception {
+        final String remoteClusterServerEndpoint = testCluster.getRemoteClusterServerEndpoint(0);
+        final URI uri = new URI("tcp://" + remoteClusterServerEndpoint);
+
+        try (var clientSocket = new Socket()) {
+            SocketAccess.doPrivileged(() -> clientSocket.connect(new InetSocketAddress(uri.getHost(), uri.getPort())));
+            final OutputStream outputStream = clientSocket.getOutputStream();
+            final InputStream inputStream = clientSocket.getInputStream();
+
+            final TestOutboundRequestMessage message = new TestOutboundRequestMessage(
+                threadPool.getThreadContext(),
+                TransportRequest.Empty.INSTANCE,
+                TransportVersion.current(),
+                RemoteClusterService.REMOTE_CLUSTER_HANDSHAKE_ACTION_NAME,
+                42,
+                false,
+                null
+            );
+            final Recycler<BytesRef> recycler = new BytesRefRecycler(PageCacheRecycler.NON_RECYCLING_INSTANCE);
+            RecyclerBytesStreamOutput out = new RecyclerBytesStreamOutput(recycler);
+            final BytesReference bytesReference = message.serialize(out);
+            outputStream.write(Arrays.copyOfRange(bytesReference.array(), 0, bytesReference.length()));
+            outputStream.flush();
+
+            final String response = new String(inputStream.readAllBytes());
+
+            // -1 means the other side has disconnected
+            assertThat(inputStream.read(), equalTo(-1));
         }
     }
 
