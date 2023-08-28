@@ -7,14 +7,18 @@
 
 package org.elasticsearch.xpack.security.transport.netty4;
 
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.node.VersionInformation;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.io.stream.RecyclerBytesStreamOutput;
 import org.elasticsearch.common.network.NetworkService;
+import org.elasticsearch.common.recycler.Recycler;
 import org.elasticsearch.common.settings.MockSecureSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.PageCacheRecycler;
@@ -25,21 +29,29 @@ import org.elasticsearch.test.NodeRoles;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
+import org.elasticsearch.transport.BytesRefRecycler;
 import org.elasticsearch.transport.ProxyConnectionStrategy;
 import org.elasticsearch.transport.RemoteClusterPortSettings;
 import org.elasticsearch.transport.RemoteClusterService;
 import org.elasticsearch.transport.RemoteConnectionStrategy;
 import org.elasticsearch.transport.SniffConnectionStrategy;
-import org.elasticsearch.transport.TransportInterceptor;
+import org.elasticsearch.transport.TestOutboundRequestMessage;
 import org.elasticsearch.transport.TransportRequest;
-import org.elasticsearch.transport.TransportRequestHandler;
+import org.elasticsearch.transport.TransportService;
 import org.elasticsearch.transport.netty4.SharedGroupFactory;
 import org.elasticsearch.xpack.core.XPackSettings;
+import org.elasticsearch.xpack.core.common.socket.SocketAccess;
 import org.elasticsearch.xpack.core.ssl.SSLService;
 import org.elasticsearch.xpack.security.authc.CrossClusterAccessAuthenticationService;
 import org.junit.After;
 import org.junit.Before;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +62,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.elasticsearch.test.ActionListenerUtils.anyActionListener;
 import static org.elasticsearch.test.NodeRoles.onlyRole;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -101,23 +115,7 @@ public class SecurityNetty4ServerTransportAuthenticationTests extends ESTestCase
             threadPool,
             null,
             Collections.emptySet(),
-            new TransportInterceptor() {
-                @Override
-                public <T extends TransportRequest> TransportRequestHandler<T> interceptHandler(
-                    String action,
-                    String executor,
-                    boolean forceExecution,
-                    TransportRequestHandler<T> actualHandler
-                ) {
-                    return (request, channel, task) -> {
-                        if (actionsShouldPassRegularAuthn.get().contains(action)) {
-                            actualHandler.messageReceived(request, channel, task);
-                        } else {
-                            channel.sendResponse(new ElasticsearchSecurityException("regular authentication failure"));
-                        }
-                    };
-                }
-            }
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR
         );
         remoteTransportService.start();
         remoteTransportService.acceptIncomingRequests();
@@ -133,6 +131,44 @@ public class SecurityNetty4ServerTransportAuthenticationTests extends ESTestCase
             remoteSecurityNetty4ServerTransport,
             () -> ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS)
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testConnectionGetsDisconnectedWhenHeaderValidationFails() throws IOException {
+        doAnswer(invocation -> {
+            ((ActionListener<Void>) invocation.getArguments()[1]).onFailure(new ElasticsearchSecurityException("failed authn"));
+            return null;
+        }).when(remoteCrossClusterAccessAuthenticationService).tryAuthenticate(any(Map.class), anyActionListener());
+
+        final InetSocketAddress remoteAddress = remoteTransportService.boundRemoteAccessAddress().publishAddress().address();
+
+        try (var clientSocket = new Socket()) {
+            SocketAccess.doPrivileged(() -> clientSocket.connect(remoteAddress));
+            final OutputStream outputStream = clientSocket.getOutputStream();
+            final InputStream inputStream = clientSocket.getInputStream();
+
+            final TestOutboundRequestMessage message = new TestOutboundRequestMessage(
+                threadPool.getThreadContext(),
+                TransportRequest.Empty.INSTANCE,
+                TransportVersion.current(),
+                RemoteClusterService.REMOTE_CLUSTER_HANDSHAKE_ACTION_NAME,
+                42,
+                false,
+                null
+            );
+            final Recycler<BytesRef> recycler = new BytesRefRecycler(PageCacheRecycler.NON_RECYCLING_INSTANCE);
+            RecyclerBytesStreamOutput out = new RecyclerBytesStreamOutput(recycler);
+            final BytesReference bytesReference = message.serialize(out);
+            outputStream.write(Arrays.copyOfRange(bytesReference.array(), 0, bytesReference.length()));
+            outputStream.flush();
+
+            final String response = new String(inputStream.readAllBytes());
+            assertThat(response, containsString("failed authn"));
+
+            // -1 means the other side has disconnected
+            assertThat(inputStream.read(), equalTo(-1));
+        }
+
     }
 
     @SuppressWarnings("unchecked")
