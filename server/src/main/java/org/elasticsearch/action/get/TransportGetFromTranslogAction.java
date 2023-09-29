@@ -80,6 +80,7 @@ public class TransportGetFromTranslogAction extends HandledTransportAction<
                     throw new AlreadyClosedException("engine closed");
                 }
                 segmentGeneration = ((InternalEngine) engine).getLastUnsafeSegmentGenerationForGets();
+                logger.info("realtime get from translog tells you to wait for {}", segmentGeneration);
             }
             return new Response(result, segmentGeneration);
         });

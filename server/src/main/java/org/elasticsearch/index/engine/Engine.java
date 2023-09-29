@@ -683,9 +683,12 @@ public abstract class Engine implements Closeable {
         if (docIdAndVersion != null) {
             // don't release the searcher on this path, it is the
             // responsibility of the caller to call GetResult.release
+            logger.info("getFromSearcher success");
             return new GetResult(searcher, docIdAndVersion);
         } else {
             Releasables.close(searcher);
+            logger.info("getFromSearcher failed");
+//            logger.error("getFromSearcher", new RuntimeException("getFromSearcher"));
             return GetResult.NOT_EXISTS;
         }
     }

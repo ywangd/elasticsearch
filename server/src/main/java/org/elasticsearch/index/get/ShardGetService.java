@@ -237,6 +237,7 @@ public final class ShardGetService extends AbstractIndexShardComponent {
                 return null;
             }
             if (get.exists() == false) {
+//                new RuntimeException("HERE").printStackTrace();
                 return new GetResult(shardId.getIndexName(), id, UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM, -1, false, null, null, null);
             }
             // break between having loaded it from translog (so we only have _source), and having a document to load

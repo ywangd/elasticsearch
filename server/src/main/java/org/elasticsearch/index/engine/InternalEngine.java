@@ -906,6 +906,7 @@ public class InternalEngine extends Engine {
                         if (operation != null) {
                             return getFromTranslog(get, (Translog.Index) operation, mappingLookup, documentParser, searcherWrapper);
                         }
+                        logger.info("operation is NULL [{}]", getFromSearcherIfNotInTranslog);
                     } catch (IOException e) {
                         maybeFailEngine("realtime_get", e); // lets check if the translog has failed with a tragic event
                         throw new EngineException(shardId, "failed to read operation from translog", e);
@@ -924,6 +925,7 @@ public class InternalEngine extends Engine {
         if (getFromSearcherIfNotInTranslog) {
             return getFromSearcher(get, acquireSearcher("realtime_get", SearcherScope.INTERNAL, searcherWrapper), false);
         }
+        logger.info("returning NULL");
         return null;
     }
 
@@ -1030,7 +1032,10 @@ public class InternalEngine extends Engine {
                 // but we only need to do this once since the last operation per ID is to add to the version
                 // map so once we pass this point we can safely lookup from the version map.
                 if (versionMap.isUnsafe()) {
-                    lastUnsafeSegmentGenerationForGets.set(lastCommittedSegmentInfos.getGeneration() + 1);
+                    final long newValue = lastCommittedSegmentInfos.getGeneration() + 1;
+                    logger.info("getVersionFromMap setting lastCommittedSegmentInfos " + newValue);
+//                    logger.error("setting " + newValue, new RuntimeException("getVersionFromMap"));
+                    lastUnsafeSegmentGenerationForGets.set(newValue);
                     refreshInternalSearcher(UNSAFE_VERSION_MAP_REFRESH_SOURCE, true);
                 }
                 versionMap.enforceSafeAccess();
@@ -2214,6 +2219,7 @@ public class InternalEngine extends Engine {
                     } catch (Exception e) {
                         throw new FlushFailedEngineException(shardId, e);
                     }
+//                    logger.error("INSIDE FLUSH", new RuntimeException("INSIDE FLUSH"));
                     refreshLastCommittedSegmentInfos();
                     generation = lastCommittedSegmentInfos.getGeneration();
                     flushListener.afterFlush(generation, commitLocation);
@@ -2256,6 +2262,8 @@ public class InternalEngine extends Engine {
         try {
             // reread the last committed segment infos
             lastCommittedSegmentInfos = store.readLastCommittedSegmentsInfo();
+            logger.info("refreshLastCommittedSegmentInfos " + lastCommittedSegmentInfos.getGeneration());
+//            logger.error("" + lastCommittedSegmentInfos.getGeneration(), new RuntimeException("read last committed segment info"));
         } catch (Exception e) {
             if (isClosed.get() == false) {
                 logger.warn("failed to read latest segment infos on flush", e);
@@ -3155,12 +3163,19 @@ public class InternalEngine extends Engine {
      * Refresh this engine **internally** iff the requesting seq_no is greater than the last refreshed checkpoint.
      */
     protected final void refreshIfNeeded(String source, long requestingSeqNo) {
-        if (lastRefreshedCheckpoint() < requestingSeqNo) {
+        final long l1 = lastRefreshedCheckpoint();
+        if (l1 < requestingSeqNo) {
             synchronized (refreshIfNeededMutex) {
-                if (lastRefreshedCheckpoint() < requestingSeqNo) {
+                final long l = lastRefreshedCheckpoint();
+                if (l < requestingSeqNo) {
+                    logger.info("refreshIfNeeded [{}] < [{}}", l,  requestingSeqNo);
                     refreshInternalSearcher(source, true);
+                } else {
+                    logger.info("NOT internally refreshIfNeeded [{}] >= [{}]", l, requestingSeqNo);
                 }
             }
+        } else {
+            logger.info("NOT refreshIfNeeded [{}] >= [{}]", l1, requestingSeqNo);
         }
     }
 

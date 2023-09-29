@@ -1222,6 +1222,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         readAllowed();
         MappingLookup mappingLookup = mapperService.mappingLookup();
         if (mappingLookup.hasMappings() == false) {
+//            new RuntimeException("HUH?").printStackTrace();
             return GetResult.NOT_EXISTS;
         }
         if (indexSettings.getIndexVersionCreated().isLegacyIndexVersion()) {

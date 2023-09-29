@@ -15,6 +15,8 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.common.util.concurrent.KeyedLock;
 import org.elasticsearch.core.Releasable;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -23,6 +25,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /** Maps _uid value to its version information. */
 public final class LiveVersionMap implements ReferenceManager.RefreshListener, Accountable {
+
+    private static Logger logger = LogManager.getLogger(LiveVersionMap.class);
 
     private final KeyedLock<BytesRef> keyedLock = new KeyedLock<>();
 
@@ -93,6 +97,7 @@ public final class LiveVersionMap implements ReferenceManager.RefreshListener, A
         }
 
         void markAsUnsafe() {
+            logger.info("markAsUnsafe");
             unsafe = true;
         }
 
@@ -262,6 +267,7 @@ public final class LiveVersionMap implements ReferenceManager.RefreshListener, A
         // try this new map, then fallback to old, then to the
         // current searcher:
         maps = maps.buildTransitionMap();
+//        new RuntimeException("beforeRefresh " + maps.current.isUnsafe() + " " + maps.old.isUnsafe()).printStackTrace();
         assert (unsafeKeysMap = unsafeKeysMap.buildTransitionMap()) != null;
         // This is not 100% correct, since concurrent indexing ops can change these counters in between our execution of the previous
         // line and this one, but that should be minor, and the error won't accumulate over time:
@@ -275,8 +281,8 @@ public final class LiveVersionMap implements ReferenceManager.RefreshListener, A
         // case. This is because we assign new maps (in beforeRefresh) slightly before Lucene actually flushes any segments for the
         // reopen, and so any concurrent indexing requests can still sneak in a few additions to that current map that are in fact
         // reflected in the previous reader. We don't touch tombstones here: they expire on their own index.gc_deletes timeframe:
-
         maps = maps.invalidateOldMap(archive);
+//        new RuntimeException("afterRefresh " + maps.current.isUnsafe() + " " + maps.old.isUnsafe()).printStackTrace();
         assert (unsafeKeysMap = unsafeKeysMap.invalidateOldMapForAssert()) != null;
 
     }

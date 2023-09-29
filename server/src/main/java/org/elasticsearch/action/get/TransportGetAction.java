@@ -110,7 +110,14 @@ public class TransportGetAction extends TransportSingleShardAction<GetRequest, G
     }
 
     @Override
-    protected void asyncShardOperation(GetRequest request, ShardId shardId, ActionListener<GetResponse> listener) throws IOException {
+    protected void asyncShardOperation(GetRequest request, ShardId shardId, ActionListener<GetResponse> oldListener) throws IOException {
+        final ActionListener<GetResponse> listener = oldListener.delegateFailure((l, r) -> {
+            if (r.isExists() == false) {
+//                new RuntimeException("GetAction").printStackTrace();
+            }
+            l.onResponse(r);
+        });
+
         IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
         IndexShard indexShard = indexService.getShard(shardId.id());
         if (indexShard.routingEntry().isPromotableToPrimary() == false) {
@@ -157,6 +164,7 @@ public class TransportGetAction extends TransportSingleShardAction<GetRequest, G
 
     @Override
     protected Executor getExecutor(GetRequest request, ShardId shardId) {
+//        return EsExecutors.DIRECT_EXECUTOR_SERVICE;
         final ClusterState clusterState = clusterService.state();
         if (clusterState.metadata().getIndexSafe(shardId.getIndex()).isSystem()) {
             return threadPool.executor(executorSelector.executorForGet(shardId.getIndexName()));
@@ -189,7 +197,10 @@ public class TransportGetAction extends TransportSingleShardAction<GetRequest, G
             client.executeLocally(
                 TransportShardRefreshAction.TYPE,
                 refreshRequest,
-                listener.delegateFailureAndWrap((l, replicationResponse) -> super.asyncShardOperation(request, shardId, l))
+                listener.delegateFailureAndWrap((l, replicationResponse) -> {
+//                    new RuntimeException("REFRESHED").printStackTrace();
+                    super.asyncShardOperation(request, shardId, l);
+                })
             );
         } else if (request.realtime()) {
             TransportGetFromTranslogAction.Request getFromTranslogRequest = new TransportGetFromTranslogAction.Request(request, shardId);
@@ -210,12 +221,20 @@ public class TransportGetAction extends TransportSingleShardAction<GetRequest, G
                         );
                         if (r.segmentGeneration() == -1) {
                             // Nothing to wait for (no previous unsafe generation), just handle the Get locally.
-                            ActionRunnable.supply(l, () -> shardOperation(request, shardId)).run();
+                            ActionRunnable.supply(l, () -> {
+//                                new RuntimeException("Nothing to wait").printStackTrace();
+                                return shardOperation(request, shardId);
+                            }).run();
                         } else {
-                            assert r.segmentGeneration() > -1L;
+                            final long segmentGeneration = r.segmentGeneration();
+                            assert segmentGeneration > -1L;
                             indexShard.waitForSegmentGeneration(
-                                r.segmentGeneration(),
-                                listener.delegateFailureAndWrap((ll, aLong) -> super.asyncShardOperation(request, shardId, ll))
+                                segmentGeneration,
+                                listener.delegateFailureAndWrap((ll, aLong) -> {
+//                                    new RuntimeException("another wait").printStackTrace();
+                                    logger.info("waited for shard generation [{}]", segmentGeneration);
+                                    super.asyncShardOperation(request, shardId, ll);
+                                })
                             );
                         }
                     }
@@ -223,6 +242,7 @@ public class TransportGetAction extends TransportSingleShardAction<GetRequest, G
             );
         } else {
             // A non-real-time get with no explicit refresh requested.
+//            new RuntimeException("IS IT POSSIBLE").printStackTrace();
             super.asyncShardOperation(request, shardId, listener);
         }
     }
