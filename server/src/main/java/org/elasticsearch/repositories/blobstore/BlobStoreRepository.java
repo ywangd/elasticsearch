@@ -513,7 +513,24 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
         final IndexId index = shardId.index();
         final int shardNum = shardId.shardId();
         final Executor executor = threadPool.executor(ThreadPool.Names.SNAPSHOT);
-        executor.execute(ActionRunnable.supply(listener, () -> {
+        logger.info(
+            "[{}] start cloneShardSnapshot of [{}] from {} to {} at shard gen {}",
+            metadata.name(),
+            shardId,
+            source,
+            target,
+            shardGeneration
+        );
+        executor.execute(ActionRunnable.supply(ActionListener.runBefore(listener, () -> {
+            logger.info(
+                "[{}] finished cloneShardSnapshot of [{}] from {} to {} at shard gen {}",
+                metadata.name(),
+                shardId,
+                source,
+                target,
+                shardGeneration
+            );
+        }), () -> {
             final long startTime = threadPool.absoluteTimeInMillis();
             final BlobContainer shardContainer = shardContainer(index, shardNum);
             final BlobStoreIndexShardSnapshots existingSnapshots;
