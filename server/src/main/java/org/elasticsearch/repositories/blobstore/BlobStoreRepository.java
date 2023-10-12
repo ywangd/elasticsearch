@@ -2135,7 +2135,6 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                     (l, repoData) -> submitUnbatchedTask(
                         "set initial safe repository generation [" + metadata.name() + "][" + repoData.getGenId() + "]",
                         new ClusterStateUpdateTask() {
-
                             @Override
                             public ClusterState execute(ClusterState currentState) {
                                 return getClusterStateWithUpdatedRepositoryGeneration(currentState, repoData);
@@ -2150,7 +2149,6 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                             public void clusterStateProcessed(ClusterState oldState, ClusterState newState) {
                                 l.onResponse(repoData);
                             }
-
                         }
                     )
                 )
