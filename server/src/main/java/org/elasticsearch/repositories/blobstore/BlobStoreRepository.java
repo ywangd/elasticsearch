@@ -2953,6 +2953,13 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
         final ShardId shardId = store.shardId();
         final SnapshotId snapshotId = context.snapshotId();
         final IndexShardSnapshotStatus snapshotStatus = context.status();
+        logger.info(
+            "[{}] start doSnapshotShard of [{}] to {} at shard gen {}",
+            metadata.name(),
+            store.shardId(),
+            context.snapshotId(),
+            snapshotStatus.generation()
+        );
         final long startTime = threadPool.absoluteTimeInMillis();
         try {
             final ShardGeneration generation = snapshotStatus.generation();
