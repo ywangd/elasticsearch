@@ -80,7 +80,7 @@ public class FsBlobStore implements BlobStore {
                 // the resolution done here is effectively a non-op.
                 logger.info("deleting [{}]", resolve);
                 IOUtils.rm(resolve);
-                logger.info("deleted [{}]", resolve);
+                logger.info("deleted  [{}]", resolve);
             } catch (IOException e) {
                 logger.info(Strings.format("deleting [{}] failed", resolve), e);
                 // IOUtils.rm puts the original exception as a string in the IOException message. Ignore no such file exception.
