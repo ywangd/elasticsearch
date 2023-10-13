@@ -19,8 +19,6 @@ import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.snapshots.IndexShardSnapshotFailedException;
 import org.elasticsearch.index.snapshots.IndexShardSnapshotStatus;
 import org.elasticsearch.index.store.Store;
-import org.elasticsearch.logging.LogManager;
-import org.elasticsearch.logging.Logger;
 import org.elasticsearch.snapshots.SnapshotId;
 
 /**
@@ -117,17 +115,8 @@ public final class SnapshotShardContext extends DelegatingActionListener<ShardSn
         return snapshotStartTime;
     }
 
-    private static final Logger logger = LogManager.getLogger(SnapshotShardContext.class);
-
     @Override
     public void onResponse(ShardSnapshotResult result) {
-        logger.info(
-            "end doSnapshotShard of [{}] to {} at shard gen {} with result {}",
-            store.shardId(),
-            snapshotId(),
-            snapshotStatus.generation(),
-            result
-        );
         delegate.onResponse(result);
     }
 

@@ -1444,8 +1444,7 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
                 );
             }, e -> handleFinalizationFailure(e, snapshot, repositoryData)));
         } catch (Exception e) {
-            logger.error(Strings.format("unexpected failure finalizing %s", snapshot), e);
-            assert false : new AssertionError("unexpected failure finalizing " + snapshot, e);
+            assert false : new AssertionError(e);
             handleFinalizationFailure(e, snapshot, repositoryData);
         }
     }
