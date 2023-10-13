@@ -100,7 +100,6 @@ import org.elasticsearch.repositories.IndexId;
 import org.elasticsearch.repositories.IndexMetaDataGenerations;
 import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.repositories.Repository;
-import org.elasticsearch.repositories.RepositoryCleanupResult;
 import org.elasticsearch.repositories.RepositoryData;
 import org.elasticsearch.repositories.RepositoryData.SnapshotDetails;
 import org.elasticsearch.repositories.RepositoryException;
@@ -889,11 +888,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
      * @param repositoryFormatIndexVersion     Repository format version
      * @param listener                         Listener to complete when done
      */
-    public void cleanup(
-        long repositoryDataGeneration,
-        IndexVersion repositoryFormatIndexVersion,
-        ActionListener<RepositoryCleanupResult> listener
-    ) {
+    public void cleanup(long repositoryDataGeneration, IndexVersion repositoryFormatIndexVersion, ActionListener<DeleteResult> listener) {
         createSnapshotsDeletion(
             List.of(),
             repositoryDataGeneration,
@@ -998,6 +993,18 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
          */
         private final Executor snapshotExecutor = threadPool.executor(ThreadPool.Names.SNAPSHOT);
 
+        /**
+         * Accumulates the number of blobs deleted by this operation.
+         */
+        // NB only counts stale root blobs today, not shard-level blobs
+        private final AtomicLong blobsDeleted = new AtomicLong();
+
+        /**
+         * Accumulates the total size of the blobs deleted by this operation.
+         */
+        // NB only counts stale root blobs today, not shard-level blobs
+        private final AtomicLong bytesDeleted = new AtomicLong();
+
         SnapshotsDeletion(
             Collection<SnapshotId> snapshotIds,
             long originalRepositoryDataGeneration,
@@ -1030,6 +1037,21 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
             Collection<String> blobsToDelete
         ) {}
 
+        /**
+         * <p>
+         *     Shard-level results, see {@link ShardSnapshotMetaDeleteResult}.
+         * </p>
+         * <p>
+         *     Writes to this list are all synchronized (via {@link #addShardDeleteResult}), and happen-before it is read so the reads need
+         *     no further synchronization
+         * </p>
+         */
+        private final List<ShardSnapshotMetaDeleteResult> shardDeleteResults = new ArrayList<>();
+
+        private synchronized void addShardDeleteResult(ShardSnapshotMetaDeleteResult shardDeleteResult) {
+            shardDeleteResults.add(shardDeleteResult);
+        }
+
         // ---------------------------------------------------------------------------------------------------------------------------------
         // The overall flow of execution
 
@@ -1043,8 +1065,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
 
         private void runWithUniqueShardMetadataNaming(SnapshotDeleteListener listener) {
             // First write the new shard state metadata (with the removed snapshot) and compute deletion targets
-            final ListenableFuture<Collection<ShardSnapshotMetaDeleteResult>> writeShardMetaDataAndComputeDeletesStep =
-                new ListenableFuture<>();
+            final ListenableFuture<Void> writeShardMetaDataAndComputeDeletesStep = new ListenableFuture<>();
             writeUpdatedShardMetadataAndComputeDeletes(writeShardMetaDataAndComputeDeletesStep);
             // Once we have put the new shard-level metadata into place, we can update the repository metadata as follows:
             // 1. Remove the snapshots from the list of existing snapshots
@@ -1054,7 +1075,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
             // index-${gen_uuid} will not be referenced by the existing RepositoryData and new RepositoryData is only
             // written if all shard paths have been successfully updated.
             final ListenableFuture<RepositoryData> writeUpdatedRepoDataStep = new ListenableFuture<>();
-            writeShardMetaDataAndComputeDeletesStep.addListener(ActionListener.wrap(shardDeleteResults -> {
+            writeShardMetaDataAndComputeDeletesStep.addListener(ActionListener.wrap(ignored -> {
                 final ShardGenerations.Builder builder = ShardGenerations.builder();
                 for (ShardSnapshotMetaDeleteResult newGen : shardDeleteResults) {
                     builder.put(newGen.indexId, newGen.shardId, newGen.newGeneration);
@@ -1074,7 +1095,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 // Run unreferenced blobs cleanup in parallel to shard-level snapshot deletion
                 try (var refs = new RefCountingRunnable(listener::onDone)) {
                     cleanupUnlinkedRootAndIndicesBlobs(newRepositoryData, refs.acquireListener().map(ignored -> null));
-                    cleanupUnlinkedShardLevelBlobs(writeShardMetaDataAndComputeDeletesStep.result(), refs.acquireListener());
+                    cleanupUnlinkedShardLevelBlobs(shardDeleteResults, refs.acquireListener());
                 }
             }, listener::onFailure));
         }
@@ -1099,7 +1120,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                             ActionRunnable.wrap(
                                 refs.acquireListener(),
                                 l0 -> writeUpdatedShardMetadataAndComputeDeletes(
-                                    l0.delegateFailure((l, shardDeleteResults) -> cleanupUnlinkedShardLevelBlobs(shardDeleteResults, l))
+                                    l0.delegateFailure((l, ignored) -> cleanupUnlinkedShardLevelBlobs(shardDeleteResults, l))
                                 )
                             )
                         );
@@ -1108,7 +1129,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
             );
         }
 
-        void runCleanup(ActionListener<RepositoryCleanupResult> listener) {
+        void runCleanup(ActionListener<DeleteResult> listener) {
             final Set<String> survivingIndexIds = originalRepositoryData.getIndices()
                 .values()
                 .stream()
@@ -1124,7 +1145,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
             );
             if (survivingIndexIds.equals(originalIndexContainers.keySet()) && staleRootBlobs.isEmpty()) {
                 // Nothing to clean up we return
-                listener.onResponse(new RepositoryCleanupResult(DeleteResult.ZERO));
+                listener.onResponse(DeleteResult.ZERO);
             } else {
                 // write new index-N blob to ensure concurrent operations will fail
                 writeIndexGen(
@@ -1136,7 +1157,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                         // TODO should we pass newRepositoryData to cleanupStaleBlobs()?
                         (l, newRepositoryData) -> cleanupUnlinkedRootAndIndicesBlobs(
                             originalRepositoryData,
-                            l.map(RepositoryCleanupResult::new)
+                            l.map(ignored -> DeleteResult.of(blobsDeleted.get(), bytesDeleted.get()))
                         )
                     )
                 );
@@ -1146,26 +1167,11 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
         // ---------------------------------------------------------------------------------------------------------------------------------
         // Updating the shard-level metadata and accumulating results
 
-        // updates the shard state metadata for shards of a snapshot that is to be deleted. Also computes the files to be cleaned up.
-        private void writeUpdatedShardMetadataAndComputeDeletes(
-            ActionListener<Collection<ShardSnapshotMetaDeleteResult>> onAllShardsCompleted
-        ) {
-
-            final List<IndexId> indices = originalRepositoryData.indicesToUpdateAfterRemovingSnapshot(snapshotIds);
-
-            if (indices.isEmpty()) {
-                onAllShardsCompleted.onResponse(Collections.emptyList());
-                return;
-            }
-
-            // Listener that flattens out the delete results for each index
-            final ActionListener<Collection<ShardSnapshotMetaDeleteResult>> deleteIndexMetadataListener = new GroupedActionListener<>(
-                indices.size(),
-                onAllShardsCompleted.map(res -> res.stream().flatMap(Collection::stream).toList())
-            );
-
-            for (IndexId indexId : indices) {
-                new IndexSnapshotsDeletion(indexId).run(deleteIndexMetadataListener);
+        private void writeUpdatedShardMetadataAndComputeDeletes(ActionListener<Void> listener) {
+            try (var listeners = new RefCountingListener(listener)) {
+                for (IndexId indexId : originalRepositoryData.indicesToUpdateAfterRemovingSnapshot(snapshotIds)) {
+                    new IndexSnapshotsDeletion(indexId).run(listeners.acquire());
+                }
             }
         }
 
@@ -1187,8 +1193,8 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 shardCount = Math.max(shardCount, newShardCount);
             }
 
-            void run(ActionListener<Collection<ShardSnapshotMetaDeleteResult>> shardResultsListener) {
-                determineShardCount(shardResultsListener.delegateFailureAndWrap((l, v) -> processShards(l)));
+            void run(ActionListener<Void> listener) {
+                determineShardCount(listener.delegateFailureAndWrap((l, v) -> processShards(l)));
             }
 
             // -----------------------------------------------------------------------------------------------------------------------------
@@ -1227,14 +1233,14 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 }
             }
 
-            private void processShards(ActionListener<Collection<ShardSnapshotMetaDeleteResult>> listener) {
+            private void processShards(ActionListener<Void> listener) {
                 final Set<SnapshotId> survivingSnapshots = snapshotsWithIndex.stream()
                     .filter(id -> snapshotIds.contains(id) == false)
                     .collect(Collectors.toSet());
-                // Listener for collecting the results of removing the snapshot from each shard's metadata in the current index
-                final ActionListener<ShardSnapshotMetaDeleteResult> allShardsListener = new GroupedActionListener<>(shardCount, listener);
-                for (int shardId = 0; shardId < shardCount; shardId++) {
-                    snapshotExecutor.execute(new ShardSnapshotsDeletion(shardId, survivingSnapshots, allShardsListener));
+                try (var listeners = new RefCountingListener(listener)) {
+                    for (int shardId = 0; shardId < shardCount; shardId++) {
+                        snapshotExecutor.execute(new ShardSnapshotsDeletion(shardId, survivingSnapshots, listeners.acquire()));
+                    }
                 }
             }
 
@@ -1245,20 +1251,16 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
 
                 private final int shardId;
                 private final Set<SnapshotId> survivingSnapshots;
-                private final ActionListener<ShardSnapshotMetaDeleteResult> allShardsListener;
+                private final ActionListener<Void> listener;
 
                 // Computed at the start of doRun(), after forking, rather than in the constructor. TODO make these local variables perhaps?
                 private BlobContainer shardContainer;
                 private Set<String> originalShardBlobs;
 
-                ShardSnapshotsDeletion(
-                    int shardId,
-                    Set<SnapshotId> survivingSnapshots,
-                    ActionListener<ShardSnapshotMetaDeleteResult> allShardsListener
-                ) {
+                ShardSnapshotsDeletion(int shardId, Set<SnapshotId> survivingSnapshots, ActionListener<Void> listener) {
                     this.shardId = shardId;
                     this.survivingSnapshots = survivingSnapshots;
-                    this.allShardsListener = allShardsListener;
+                    this.listener = listener;
                 }
 
                 @Override
@@ -1282,7 +1284,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                         newGen = tuple.v2() + 1;
                         blobStoreIndexShardSnapshots = tuple.v1();
                     }
-                    allShardsListener.onResponse(
+                    addShardDeleteResult(
                         deleteFromShardSnapshotMeta(blobStoreIndexShardSnapshots.withRetainedSnapshots(survivingSnapshots), newGen)
                     );
                 }
@@ -1366,13 +1368,16 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
 
                 @Override
                 public void onFailure(Exception ex) {
+                    // TODO: Should we fail the delete here? See https://github.com/elastic/elasticsearch/issues/100569.
                     logger.warn(
                         () -> format("%s failed to delete shard data for shard [%s][%s]", snapshotIds, indexId.getName(), shardId),
                         ex
                     );
-                    // Just passing null here to count down the listener instead of failing it, the stale data left behind
-                    // here will be retried in the next delete or repository cleanup
-                    allShardsListener.onResponse(null);
+                }
+
+                @Override
+                public void onAfter() {
+                    listener.onResponse(null);
                 }
             }
         }
@@ -1430,15 +1435,10 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
          * snapshots. This method is only to be called directly after a new {@link RepositoryData} was written to the repository.
          *
          * @param newRepositoryData       new repository data that was just written
-         * @param listener                listener to invoke with the combined {@link DeleteResult} of all blobs removed in this operation
+         * @param listener                listener to invoke when the deletion is complete
          */
-        private void cleanupUnlinkedRootAndIndicesBlobs(RepositoryData newRepositoryData, ActionListener<DeleteResult> listener) {
-            final var blobsDeleted = new AtomicLong();
-            final var bytesDeleted = new AtomicLong();
-            try (
-                var listeners = new RefCountingListener(listener.map(ignored -> DeleteResult.of(blobsDeleted.get(), bytesDeleted.get())))
-            ) {
-
+        private void cleanupUnlinkedRootAndIndicesBlobs(RepositoryData newRepositoryData, ActionListener<Void> listener) {
+            try (var listeners = new RefCountingListener(listener)) {
                 final List<String> staleRootBlobs = staleRootBlobs(newRepositoryData, originalRootBlobs.keySet());
                 if (staleRootBlobs.isEmpty() == false) {
                     staleBlobDeleteRunner.enqueueTask(listeners.acquire(ref -> {
