@@ -9,11 +9,14 @@
 package org.elasticsearch.common.blobstore.fs;
 
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.blobstore.BlobPath;
 import org.elasticsearch.common.blobstore.BlobStore;
 import org.elasticsearch.common.blobstore.OperationPurpose;
 import org.elasticsearch.core.IOUtils;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -64,17 +67,22 @@ public class FsBlobStore implements BlobStore {
         return new FsBlobContainer(this, path, f);
     }
 
+    private static final Logger logger = LogManager.getLogger(FsBlobStore.class);
+
     @Override
     public void deleteBlobsIgnoringIfNotExists(OperationPurpose purpose, Iterator<String> blobNames) throws IOException {
         IOException ioe = null;
         long suppressedExceptions = 0;
         while (blobNames.hasNext()) {
+            Path resolve = path.resolve(blobNames.next());
             try {
                 // FsBlobContainer uses this method to delete blobs; in that case each blob name is already an absolute path meaning that
                 // the resolution done here is effectively a non-op.
-                Path resolve = path.resolve(blobNames.next());
+                logger.info("deleting [{}]", resolve);
                 IOUtils.rm(resolve);
+                logger.info("deleted  [{}]", resolve);
             } catch (IOException e) {
+                logger.info(Strings.format("deleting [{}] failed", resolve), e);
                 // IOUtils.rm puts the original exception as a string in the IOException message. Ignore no such file exception.
                 if (e.getMessage().contains("NoSuchFileException") == false) {
                     // track up to 10 delete exceptions and try to continue deleting on exceptions

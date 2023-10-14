@@ -211,6 +211,7 @@ public class FsBlobContainer extends AbstractBlobContainer {
     public void writeBlob(OperationPurpose purpose, String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists)
         throws IOException {
         final Path file = path.resolve(blobName);
+        logger.info("writeBlob [{}]", file);
         try {
             writeToPath(inputStream, file, blobSize);
         } catch (FileAlreadyExistsException faee) {
@@ -226,6 +227,7 @@ public class FsBlobContainer extends AbstractBlobContainer {
     @Override
     public void writeBlob(OperationPurpose purpose, String blobName, BytesReference bytes, boolean failIfAlreadyExists) throws IOException {
         final Path file = path.resolve(blobName);
+        logger.info("writeBlob [{}]", file);
         try {
             writeToPath(bytes, file);
         } catch (FileAlreadyExistsException faee) {
@@ -335,6 +337,7 @@ public class FsBlobContainer extends AbstractBlobContainer {
     ) throws IOException {
         final Path sourceBlobPath = path.resolve(sourceBlobName);
         final Path targetBlobPath = path.resolve(targetBlobName);
+        logger.info("moveBlobAtomic to [{}]", targetBlobPath);
         try {
             if (failIfAlreadyExists && Files.exists(targetBlobPath)) {
                 throw new FileAlreadyExistsException("blob [" + targetBlobPath + "] already exists, cannot overwrite");

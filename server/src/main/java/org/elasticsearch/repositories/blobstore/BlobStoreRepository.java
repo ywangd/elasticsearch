@@ -512,7 +512,24 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
         final IndexId index = shardId.index();
         final int shardNum = shardId.shardId();
         final Executor executor = threadPool.executor(ThreadPool.Names.SNAPSHOT);
-        executor.execute(ActionRunnable.supply(listener, () -> {
+        logger.info(
+            "[{}] start cloneShardSnapshot of [{}] from {} to {} at shard gen {}",
+            metadata.name(),
+            shardId,
+            source,
+            target,
+            shardGeneration
+        );
+        executor.execute(ActionRunnable.supply(ActionListener.runBefore(listener, () -> {
+            logger.info(
+                "[{}] finished cloneShardSnapshot of [{}] from {} to {} at shard gen {}",
+                metadata.name(),
+                shardId,
+                source,
+                target,
+                shardGeneration
+            );
+        }), () -> {
             final long startTime = threadPool.absoluteTimeInMillis();
             final BlobContainer shardContainer = shardContainer(index, shardNum);
             final BlobStoreIndexShardSnapshots existingSnapshots;
@@ -1118,6 +1135,13 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 .map(IndexId::getId)
                 .collect(Collectors.toSet());
             final List<String> staleRootBlobs = staleRootBlobs(originalRepositoryData, originalRootBlobs.keySet());
+            logger.info(
+                "[{}] cleanup at gen [{}]: got root blobs {}, stale blobs {}",
+                metadata.name(),
+                originalRepositoryData.getGenId(),
+                originalRootBlobs.keySet(),
+                staleRootBlobs
+            );
             if (survivingIndexIds.equals(originalIndexContainers.keySet()) && staleRootBlobs.isEmpty()) {
                 // Nothing to clean up we return
                 listener.onResponse(DeleteResult.ZERO);
@@ -1375,7 +1399,15 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
             }
             snapshotExecutor.execute(ActionRunnable.wrap(listener, l -> {
                 try {
-                    deleteFromContainer(blobContainer(), filesToDelete);
+                    deleteFromContainer(blobContainer(), Iterators.map(filesToDelete, blobName -> {
+                        logger.info(
+                            "[{}] cleanupUnlinkedShardLevelBlobs[{}] deleting [{}]",
+                            metadata.name(),
+                            originalRepositoryData.getGenId(),
+                            blobName
+                        );
+                        return blobName;
+                    }));
                     l.onResponse(null);
                 } catch (Exception e) {
                     logger.warn(() -> format("%s Failed to delete some blobs during snapshot delete", snapshotIds), e);
@@ -1415,7 +1447,15 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                     staleBlobDeleteRunner.enqueueTask(listeners.acquire(ref -> {
                         try (ref) {
                             logStaleRootLevelBlobs(newRepositoryData.getGenId() - 1, snapshotIds, staleRootBlobs);
-                            deleteFromContainer(blobContainer(), staleRootBlobs.iterator());
+                            deleteFromContainer(blobContainer(), Iterators.map(staleRootBlobs.iterator(), blobName -> {
+                                logger.info(
+                                    "[{}] cleanupUnlinkedRootAndIndicesBlobs[{}] deleting [{}]",
+                                    metadata.name(),
+                                    newRepositoryData.getGenId() - 1,
+                                    blobName
+                                );
+                                return blobName;
+                            }));
                             for (final var staleRootBlob : staleRootBlobs) {
                                 bytesDeleted.addAndGet(originalRootBlobs.get(staleRootBlob).length());
                             }
@@ -1445,11 +1485,11 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                     }
                     staleBlobDeleteRunner.enqueueTask(listeners.acquire(ref -> {
                         try (ref) {
-                            logger.debug("[{}] Found stale index [{}]. Cleaning it up", metadata.name(), indexId);
+                            logger.info("[{}] Found stale index [{}]. Cleaning it up", metadata.name(), indexId);
                             final var deleteResult = indexEntry.getValue().delete(OperationPurpose.SNAPSHOT);
                             blobsDeleted.addAndGet(deleteResult.blobsDeleted());
                             bytesDeleted.addAndGet(deleteResult.bytesDeleted());
-                            logger.debug("[{}] Cleaned up stale index [{}]", metadata.name(), indexId);
+                            logger.info("[{}] Cleaned up stale index [{}]", metadata.name(), indexId);
                         } catch (IOException e) {
                             logger.warn(() -> format("""
                                 [%s] index %s is no longer part of any snapshot in the repository, \
@@ -2916,6 +2956,13 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
         final ShardId shardId = store.shardId();
         final SnapshotId snapshotId = context.snapshotId();
         final IndexShardSnapshotStatus snapshotStatus = context.status();
+        logger.info(
+            "[{}] start doSnapshotShard of [{}] to {} at shard gen {}",
+            metadata.name(),
+            store.shardId(),
+            context.snapshotId(),
+            snapshotStatus.generation()
+        );
         final long startTime = threadPool.absoluteTimeInMillis();
         try {
             final ShardGeneration generation = snapshotStatus.generation();
