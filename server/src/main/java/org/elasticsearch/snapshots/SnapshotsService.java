@@ -809,6 +809,8 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
     public void applyClusterState(ClusterChangedEvent event) {
         try {
             if (event.localNodeMaster()) {
+                logCurrentState();
+
                 // We don't remove old master when master flips anymore. So, we need to check for change in master
                 SnapshotsInProgress snapshotsInProgress = SnapshotsInProgress.get(event.state());
                 final boolean newMaster = event.previousState().nodes().isLocalNodeElectedMaster() == false;
@@ -841,6 +843,13 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
         }
         assert assertConsistentWithClusterState(event.state());
         assert assertNoDanglingSnapshots(event.state());
+    }
+
+    private synchronized void logCurrentState() {
+        logger.info("currentlyFinalizing: {}", currentlyFinalizing);
+        logger.info("currentlyCloning: {}", currentlyCloning);
+        logger.info("endingSnapshots: {}", endingSnapshots);
+        logger.info("initializingClones: {}", initializingClones);
     }
 
     private boolean assertConsistentWithClusterState(ClusterState state) {
@@ -3527,6 +3536,7 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
             final Snapshot nextEntry;
             final Deque<Snapshot> queued = snapshotsToFinalize.get(repository);
             if (queued == null) {
+                logger.info("pollFinalization[{}]: nothing to do", repository);
                 return null;
             }
             nextEntry = queued.pollFirst();
@@ -3539,19 +3549,24 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
                 latestKnownMetaData = null;
             }
             assert assertConsistent();
+            logger.info("pollFinalization[{}]: got [{}], leaving [{}]", repository, res.v1(), snapshotsToFinalize);
             return res;
         }
 
         boolean startDeletion(String deleteUUID) {
-            return runningDeletions.add(deleteUUID);
+            final var res = runningDeletions.add(deleteUUID);
+            logger.info("startDeletion[{}], state now [{}]", deleteUUID, runningDeletions);
+            return res;
         }
 
         void finishDeletion(String deleteUUID) {
             runningDeletions.remove(deleteUUID);
+            logger.info("finishDeletion[{}], state now [{}]", deleteUUID, runningDeletions);
         }
 
         synchronized void addFinalization(Snapshot snapshot, Metadata metadata) {
             snapshotsToFinalize.computeIfAbsent(snapshot.getRepository(), k -> new LinkedList<>()).add(snapshot);
+            logger.info("addFinalization: [{}], state now {}", snapshot, snapshotsToFinalize);
             this.latestKnownMetaData = metadata;
             assertConsistent();
         }
@@ -3561,6 +3576,7 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
          * being master.
          */
         synchronized void clear() {
+            logger.info("clear OngoingRepositoryOperations");
             snapshotsToFinalize.clear();
             runningDeletions.clear();
             latestKnownMetaData = null;
