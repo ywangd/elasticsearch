@@ -2680,8 +2680,13 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
             if (ensureSafeGenerationExists(expectedGen, delegate::onFailure) == false) {
                 return;
             }
-            final String indexBlob = INDEX_FILE_PREFIX + Long.toString(newGen);
-            logger.debug("Repository [{}] writing new index generational blob [{}]", metadata.name(), indexBlob);
+            final String indexBlob = INDEX_FILE_PREFIX + newGen;
+            logger.info(
+                "[{}] writing new RepositoryData [{}]: {}",
+                metadata.name(),
+                indexBlob,
+                Strings.toString((builder, params) -> newRepositoryData.snapshotsToXContent(builder, IndexVersion.current()))
+            );
             writeAtomic(blobContainer(), indexBlob, out -> {
                 try (XContentBuilder xContentBuilder = XContentFactory.jsonBuilder(org.elasticsearch.core.Streams.noCloseStream(out))) {
                     newRepositoryData.snapshotsToXContent(xContentBuilder, version);
