@@ -1897,9 +1897,6 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
     public void deleteSnapshots(final DeleteSnapshotRequest request, final ActionListener<Void> listener) {
         final String repositoryName = request.repository();
         final String[] snapshotNames = request.snapshots();
-        logger.info(
-            () -> format("deleting snapshots [%s] from repository [%s]", arrayToCommaDelimitedString(snapshotNames), repositoryName)
-        );
 
         final Repository repository = repositoriesService.repository(repositoryName);
         executeConsistentStateUpdate(repository, repositoryData -> new ClusterStateUpdateTask(request.masterNodeTimeout()) {
@@ -2074,6 +2071,10 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
 
             @Override
             public void clusterStateProcessed(ClusterState oldState, ClusterState newState) {
+                logger.info(
+                    () -> format("deleting snapshots [%s] from repository [%s]", arrayToCommaDelimitedString(snapshotNames), repositoryName)
+                );
+
                 if (completedNoCleanup.isEmpty() == false) {
                     logger.info("snapshots {} aborted", completedNoCleanup);
                 }
@@ -2371,7 +2372,19 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
 
                     @Override
                     public void onFailure(Exception e) {
-                        logger.debug(() -> "failed to complete snapshot deletion [" + deleteEntry + "]", e);
+                        logger.warn(() -> {
+                            final StringBuilder sb = new StringBuilder("failed to complete snapshot deletion for [");
+                            Strings.collectionToDelimitedStringWithLimit(
+                                deleteEntry.getSnapshots().stream().map(SnapshotId::getName).toList(),
+                                ",",
+                                "",
+                                "",
+                                1024,
+                                sb
+                            );
+                            sb.append("] from repository [").append(deleteEntry.repository()).append("]");
+                            return sb;
+                        }, e);
                         submitUnbatchedTask(
                             "remove snapshot deletion metadata after failed delete",
                             new RemoveSnapshotDeletionAndContinueTask(deleteEntry, repositoryData) {
