@@ -2621,6 +2621,15 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 logger.trace("[{}] successfully set pending repository generation to [{}]", metadata.name(), newGen);
                 setPendingStep.onResponse(newGen);
             }
+
+            @Override
+            public String toString() {
+                return Strings.format(
+                    "start RepositoryData update from generation [%d], stateFilter=[%s]",
+                    expectedGen,
+                    stateFilter
+                );
+            }
         });
 
         final ListenableFuture<RepositoryData> filterRepositoryDataStep = new ListenableFuture<>();
@@ -2750,7 +2759,12 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
 
                 @Override
                 public String toString() {
-                    return Strings.format("complete RepositoryData update to generation [%d], stateFilter=[%s]", newGen, stateFilter);
+                    return Strings.format(
+                        "complete RepositoryData update from generation [%d] to generation [%d], stateFilter=[%s]",
+                        expectedGen,
+                        newGen,
+                        stateFilter
+                    );
                 }
             });
         }));
