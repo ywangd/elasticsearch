@@ -408,6 +408,8 @@ public final class RepositoryData {
         @Nullable final Map<IndexId, String> indexMetaBlobs,
         @Nullable final Map<String, String> newIdentifiers
     ) {
+        logger.info("addSnapshot({}, {})", snapshotId, shardGenerations);
+
         if (snapshotIds.containsKey(snapshotId.getUUID())) {
             // if the snapshot id already exists in the repository data, it means an old master
             // that is blocked from the cluster is trying to finalize a snapshot concurrently with
@@ -520,6 +522,7 @@ public final class RepositoryData {
      *                                changed shard indexed by its shardId
      */
     public RepositoryData removeSnapshots(final Collection<SnapshotId> snapshots, final ShardGenerations updatedShardGenerations) {
+        logger.info("removeSnapshots({}, {})", snapshots, updatedShardGenerations);
         Map<String, SnapshotId> newSnapshotIds = snapshotIds.values()
             .stream()
             .filter(Predicate.not(snapshots::contains))
