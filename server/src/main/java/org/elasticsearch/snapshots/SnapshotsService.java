@@ -1320,6 +1320,12 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
             final String failure = entry.failure();
             logger.trace("[{}] finalizing snapshot in repository, state: [{}], failure[{}]", snapshot, entry.state(), failure);
             final ShardGenerations shardGenerations = buildGenerations(entry, metadata);
+            logger.info(
+                "[{}] finalizing snapshot using repo data gen [{}] and shard generations [{}]",
+                snapshot,
+                repositoryData.getGenId(),
+                shardGenerations
+            );
             final List<String> finalIndices = shardGenerations.indices().stream().map(IndexId::getName).toList();
             final Set<String> indexNames = new HashSet<>(finalIndices);
             ArrayList<SnapshotShardFailure> shardFailures = new ArrayList<>();
