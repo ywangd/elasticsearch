@@ -122,6 +122,7 @@ import org.elasticsearch.snapshots.SnapshotsService;
 import org.elasticsearch.tasks.TaskCancelledException;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
+import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
 import org.elasticsearch.xcontent.XContentParser;
@@ -2685,7 +2686,9 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 "[{}] writing new RepositoryData [{}]: {}",
                 metadata.name(),
                 indexBlob,
-                Strings.toString((builder, params) -> newRepositoryData.snapshotsToXContent(builder, IndexVersion.current()))
+                Strings.toString(
+                    (ToXContentObject) (builder, params) -> newRepositoryData.snapshotsToXContent(builder, IndexVersion.current())
+                )
             );
             writeAtomic(blobContainer(), indexBlob, out -> {
                 try (XContentBuilder xContentBuilder = XContentFactory.jsonBuilder(org.elasticsearch.core.Streams.noCloseStream(out))) {
