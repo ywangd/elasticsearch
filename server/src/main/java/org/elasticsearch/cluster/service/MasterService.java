@@ -357,14 +357,10 @@ public class MasterService extends AbstractLifecycleComponent {
                 Source: {}
                 Tasks:
                 {}
-                RepositoriesMetadata
-                {}
-                SnapshotsInProgress
-                {}
-                SnapshotDeletionsInProgress
-                {}
-                RepositoryCleanupInProgress
-                {}
+                RepositoriesMetadata: {}
+                SnapshotsInProgress: {}
+                SnapshotDeletionsInProgress: {}
+                RepositoryCleanupInProgress: {}
                 """,
             newClusterState.version(),
             newClusterState.term(),
