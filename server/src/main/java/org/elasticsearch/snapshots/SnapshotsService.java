@@ -1309,6 +1309,7 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
         assert currentlyFinalizing.contains(snapshot.getRepository());
         try {
             SnapshotsInProgress.Entry entry = SnapshotsInProgress.get(clusterService.state()).snapshot(snapshot);
+            logger.info("finalizeSnapshotEntry [{}] finalizing snapshot in repository of entry [{}]", snapshot, entry);
             final String failure = entry.failure();
             logger.trace("[{}] finalizing snapshot in repository, state: [{}], failure[{}]", snapshot, entry.state(), failure);
             final ShardGenerations shardGenerations = buildGenerations(entry, metadata);
@@ -1532,7 +1533,7 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
                 leaveRepoLoop(repository);
             }
         } else {
-            logger.trace("Moving on to finalizing next snapshot [{}]", nextFinalization);
+            logger.info("Moving on to finalizing next snapshot [{}]", nextFinalization);
             finalizeSnapshotEntry(nextFinalization.v1(), nextFinalization.v2(), repositoryData);
         }
     }
@@ -1631,6 +1632,7 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
      * @return updated cluster state
      */
     public static ClusterState stateWithoutSnapshot(ClusterState state, Snapshot snapshot) {
+        logger.info("stateWithoutSnapshot [{}]", snapshot);
         final SnapshotsInProgress snapshots = SnapshotsInProgress.get(state);
         ClusterState result = state;
         int indexOfEntry = -1;
@@ -2080,6 +2082,7 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
                         return;
                     }
                     if (newDelete.state() == SnapshotDeletionsInProgress.State.STARTED) {
+                        logger.info("Delete [{}] executing immediately", newDelete);
                         if (tryEnterRepoLoop(repositoryName)) {
                             deleteSnapshotsFromRepository(
                                 newDelete,
@@ -2090,7 +2093,12 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
                             logger.trace("Delete [{}] could not execute directly and was queued", newDelete);
                         }
                     } else {
+                        logger.info("Delete [{}] deferred with endingSnapshots={}", newDelete, endingSnapshots);
                         for (SnapshotsInProgress.Entry completedSnapshot : completedWithCleanup) {
+                            logger.info("Delete [{}] causes endSnapshot [{}]", newDelete, completedSnapshot.snapshot());
+                            if (endingSnapshots.contains(completedSnapshot.snapshot())) {
+                                logger.warn("--> YIKES ENDING [{}] TWICE!!!", completedSnapshot.snapshot());
+                            }
                             endSnapshot(completedSnapshot, newState.metadata(), repositoryData);
                         }
                     }

@@ -1673,7 +1673,17 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                     ),
                     repositoryStateId,
                     repositoryMetaVersion,
-                    finalizeSnapshotContext::updatedClusterState,
+                    new Function<>() {
+                        @Override
+                        public ClusterState apply(ClusterState state) {
+                            return finalizeSnapshotContext.updatedClusterState(state);
+                        }
+
+                        @Override
+                        public String toString() {
+                            return "finalizing snapshot [" + finalizeSnapshotContext.snapshotInfo().snapshotId() + "]";
+                        }
+                    },
                     l.map(newRepositoryData -> new RootBlobUpdateResult(existingRepositoryData, newRepositoryData))
                 );
                 // NB failure of writeIndexGen doesn't guarantee the update failed, so we cannot safely clean anything up on failure
@@ -2688,6 +2698,11 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                     logger.trace("[{}] successfully set safe repository generation to [{}]", metadata.name(), newGen);
                     cacheRepositoryData(newRepositoryData, version);
                     delegate.onResponse(newRepositoryData);
+                }
+
+                @Override
+                public String toString() {
+                    return Strings.format("complete RepositoryData update to generation [%d], stateFilter=[%s]", newGen, stateFilter);
                 }
             });
         }));
