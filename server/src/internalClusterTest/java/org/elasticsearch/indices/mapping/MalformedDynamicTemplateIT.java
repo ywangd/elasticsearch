@@ -56,11 +56,11 @@ public class MalformedDynamicTemplateIT extends ESIntegTestCase {
                     .put(indexSettings())
                     .put("number_of_shards", 1)
                     .put("index.version.created", IndexVersionUtils.randomPreviousCompatibleVersion(random(), IndexVersions.V_8_0_0))
-            ).setMapping(mapping).get()
+            ).setMapping(mapping)
         );
         client().prepareIndex(indexName).setSource("{\"foo\" : \"bar\"}", XContentType.JSON).get();
         assertNoFailures((indicesAdmin().prepareRefresh(indexName)).get());
-        assertHitCount(client().prepareSearch(indexName), 1);
+        assertHitCount(prepareSearch(indexName), 1);
 
         MapperParsingException ex = expectThrows(
             MapperParsingException.class,
