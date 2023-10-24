@@ -562,6 +562,11 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
                         logger.warn("Did not find expected entry [{}] in the cluster state", cloneEntry);
                     }
                 }
+
+                @Override
+                public String toString() {
+                    return Strings.format("start snapshot clone [%s] from [%s]", updatedEntry.snapshot(), updatedEntry.source());
+                }
             }, "start snapshot clone", onFailure), onFailure)
         );
     }
@@ -2119,6 +2124,11 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
                     }
                 }
             }
+
+            @Override
+            public String toString() {
+                return Strings.format("delete snapshot task [%s]%s", repository, Arrays.toString(snapshotNames));
+            }
         }, "delete snapshot [" + repository + "]" + Arrays.toString(snapshotNames), listener::onFailure);
     }
 
@@ -2713,6 +2723,11 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
         private static void markShardReassigned(RepositoryShardId shardId, Set<RepositoryShardId> reassignments) {
             final boolean added = reassignments.add(shardId);
             assert added : "should only ever reassign each shard once but assigned [" + shardId + "] multiple times";
+        }
+
+        @Override
+        public String toString() {
+            return "RemoveSnapshotDeletionAndContinueTask[" + deleteEntry + "]";
         }
     }
 
