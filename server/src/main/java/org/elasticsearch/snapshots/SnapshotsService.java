@@ -1316,7 +1316,7 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
 
     private void finalizeSnapshotEntry(Snapshot snapshot, Metadata metadata, RepositoryData repositoryData) {
         assert currentlyFinalizing.contains(snapshot.getRepository());
-        assert repositoryOperations.assertNotQueued(snapshot) : snapshot + " should not be in " + repositoryOperations.snapshotsToFinalize;
+        assert repositoryOperations.assertNotQueued(snapshot);
         try {
             SnapshotsInProgress.Entry entry = SnapshotsInProgress.get(clusterService.state()).snapshot(snapshot);
             final String failure = entry.failure();
@@ -3616,7 +3616,7 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
         synchronized boolean assertNotQueued(Snapshot snapshot) {
             assert snapshotsToFinalize.getOrDefault(snapshot.getRepository(), new LinkedList<>())
                 .stream()
-                .noneMatch(entry -> entry.equals(snapshot)) : "Snapshot [" + snapshot + "] is still in finalization queue";
+                .noneMatch(entry -> entry.equals(snapshot)) : "[" + snapshot + "] should not be in " + snapshotsToFinalize;
             return true;
         }
 
