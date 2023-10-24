@@ -2624,11 +2624,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
 
             @Override
             public String toString() {
-                return Strings.format(
-                    "start RepositoryData update from generation [%d], stateFilter=[%s]",
-                    expectedGen,
-                    stateFilter
-                );
+                return Strings.format("start RepositoryData update from generation [%d], stateFilter=[%s]", expectedGen, stateFilter);
             }
         });
 
