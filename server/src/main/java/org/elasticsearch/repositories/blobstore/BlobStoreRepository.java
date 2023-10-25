@@ -1722,7 +1722,7 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
 
                         @Override
                         public String toString() {
-                            return "finalizing snapshot [" + finalizeSnapshotContext.snapshotInfo().snapshotId() + "]";
+                            return "finalizing snapshot [" + metadata.name() + "][" + snapshotId + "]";
                         }
                     },
                     l.map(newRepositoryData -> new RootBlobUpdateResult(existingRepositoryData, newRepositoryData))
