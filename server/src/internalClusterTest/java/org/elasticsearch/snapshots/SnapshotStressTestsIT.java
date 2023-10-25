@@ -1050,7 +1050,7 @@ public class SnapshotStressTestsIT extends AbstractSnapshotIntegTestCase {
                                         if (ExceptionsHelper.unwrapCause(e) instanceof SnapshotMissingException) {
                                             // processed before the snapshot even started
                                             logger.info(
-                                                "--> abort/delete of [{}:{}] got snapshot missing",
+                                                "--> abort/delete snapshot [{}:{}] got snapshot missing",
                                                 trackedRepository.repositoryName,
                                                 snapshotName
                                             );
