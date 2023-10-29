@@ -1293,7 +1293,11 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
                 repositoriesService.repository(repoName).getRepositoryData(new ActionListener<>() {
                     @Override
                     public void onResponse(RepositoryData repositoryData) {
-                        finalizeSnapshotEntry(snapshot, metadata, repositoryData);
+                        if (newFinalization) {
+                            finalizeSnapshotEntry(snapshot, metadata, repositoryData);
+                        } else {
+                            runNextQueuedOperation(repositoryData, repoName, false);
+                        }
                     }
 
                     @Override
@@ -1302,7 +1306,11 @@ public class SnapshotsService extends AbstractLifecycleComponent implements Clus
                     }
                 });
             } else {
-                finalizeSnapshotEntry(snapshot, metadata, repositoryData);
+                if (newFinalization) {
+                    finalizeSnapshotEntry(snapshot, metadata, repositoryData);
+                } else {
+                    runNextQueuedOperation(repositoryData, repoName, false);
+                }
             }
         } else {
             if (newFinalization) {

@@ -77,25 +77,25 @@ public class SnapshotsServiceNpeIT extends AbstractSnapshotIntegTestCase {
         indexRandomDocs("index-3", 50);
 
         // 1 - create repository and take a snapshot
-        final String repoName = "repo-2";
+        final String repoName = "repo";
         createRepository(repoName, TestRepositoryPlugin.REPO_TYPE);
         final TestRepository testRepository = getRepositoryOnMaster(repoName);
-        logger.info("--> create snapshot partial-8");
-        createSnapshot(repoName, "partial-8", List.of("index-1"));
+        logger.info("--> create snapshot snap-1");
+        createSnapshot(repoName, "snap-1", List.of("index-1"));
 
-        // 2 - Start deleting the above created snapshot and block it at listing root blobs
+        // 2 - Start deleting the snap-1 and block it at listing root blobs
         PlainActionFuture<Void> future = setWaitForClusterState(state -> {
             final SnapshotDeletionsInProgress snapshotDeletionsInProgress = SnapshotDeletionsInProgress.get(state);
             return snapshotDeletionsInProgress.getEntries()
                 .stream()
                 .flatMap(entry -> entry.getSnapshots().stream())
-                .anyMatch(snapshotId -> snapshotId.getName().equals("partial-8"));
+                .anyMatch(snapshotId -> snapshotId.getName().equals("snap-1"));
 
         });
         final CyclicBarrier barrier = testRepository.blockOnceForListBlobs();
         new Thread(() -> {
-            logger.info("--> start deleting snapshot partial-8 ");
-            startDeleteSnapshot(repoName, "partial-8");
+            logger.info("--> start deleting snapshot snap-1 ");
+            startDeleteSnapshot(repoName, "snap-1");
         }).start();
         assertBusy(() -> assertThat(barrier.getNumberWaiting(), equalTo(1)));
         future.actionGet();
@@ -110,7 +110,7 @@ public class SnapshotsServiceNpeIT extends AbstractSnapshotIntegTestCase {
             final SnapshotsInProgress snapshotsInProgress = SnapshotsInProgress.get(state);
             return snapshotsInProgress.asStream()
                 .anyMatch(
-                    entry -> entry.snapshot().getSnapshotId().getName().equals("partial-15")
+                    entry -> entry.snapshot().getSnapshotId().getName().equals("snap-2")
                         && entry.state() == SnapshotsInProgress.State.STARTED
                         && entry.shards()
                             .values()
@@ -120,7 +120,7 @@ public class SnapshotsServiceNpeIT extends AbstractSnapshotIntegTestCase {
                             .equals(Set.of(SnapshotsInProgress.ShardState.QUEUED, SnapshotsInProgress.ShardState.MISSING))
                 );
         });
-        clusterAdmin().prepareCreateSnapshot(repoName, "partial-15")
+        clusterAdmin().prepareCreateSnapshot(repoName, "snap-2")
             .setIndices("index-2", "index-3")
             .setPartial(true)
             .setWaitForCompletion(false)
@@ -128,12 +128,12 @@ public class SnapshotsServiceNpeIT extends AbstractSnapshotIntegTestCase {
         indicesAdmin().prepareDelete("index-3").get();
         future.actionGet();
 
-        // 5 - Start deleting partial-15, itself should be WAITING. But changes InProgress partial-15 to SUCCESS
+        // 5 - Start deleting snap-2, itself should be WAITING. But changes InProgress snap-2 to SUCCESS
         future = setWaitForClusterState(state -> {
             final SnapshotsInProgress snapshotsInProgress = SnapshotsInProgress.get(state);
             final boolean foundSnapshot = snapshotsInProgress.asStream()
                 .anyMatch(
-                    entry -> entry.snapshot().getSnapshotId().getName().equals("partial-15")
+                    entry -> entry.snapshot().getSnapshotId().getName().equals("snap-2")
                         && entry.state() == SnapshotsInProgress.State.SUCCESS
                         && entry.shards()
                             .values()
@@ -150,16 +150,16 @@ public class SnapshotsServiceNpeIT extends AbstractSnapshotIntegTestCase {
                 .stream()
                 .anyMatch(
                     entry -> entry.state() == SnapshotDeletionsInProgress.State.WAITING
-                        && entry.getSnapshots().stream().anyMatch(snapshotId -> snapshotId.getName().equals("partial-15"))
+                        && entry.getSnapshots().stream().anyMatch(snapshotId -> snapshotId.getName().equals("snap-2"))
                 );
         });
         new Thread(() -> {
-            logger.info("--> start deleting snapshot partial-15 ");
-            startDeleteSnapshot(repoName, "partial-15");
+            logger.info("--> start deleting snapshot snap-2 ");
+            startDeleteSnapshot(repoName, "snap-2");
         }).start();
         future.actionGet();
 
-        // Let the deletion of partial-8 to complete. It will trigger newFinalization of partial-15 and trips the assertion
+        // Let the deletion of snap-1 to complete. It will trigger newFinalization of snap-2 and trips the assertion
         barrier.await();
 
         awaitNoMoreRunningOperations();
