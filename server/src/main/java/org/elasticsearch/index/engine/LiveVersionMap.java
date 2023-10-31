@@ -353,7 +353,14 @@ public final class LiveVersionMap implements ReferenceManager.RefreshListener, A
     void maybePutIndexUnderLock(BytesRef uid, IndexVersionValue version) {
         assert assertKeyedLockHeldByCurrentThread(uid);
         Maps maps = this.maps;
-        logger.info("--> maybePutIndexUnderLock isSafe [{}] [{}]", maps.isSafeAccessMode(), Thread.currentThread().getName());
+        logger.info(
+            "--> maybePutIndexUnderLock isSafeAccess [{}], isUnsafe current [{}] old [{}] archive [{}], [{}]",
+            maps.isSafeAccessMode(),
+            maps.current.isUnsafe(),
+            maps.old.isUnsafe(),
+            archive.isUnsafe(),
+            Thread.currentThread().getName()
+        );
         if (maps.isSafeAccessMode()) {
             putIndexUnderLock(uid, version);
         } else {
