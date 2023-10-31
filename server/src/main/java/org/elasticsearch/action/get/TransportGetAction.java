@@ -147,6 +147,12 @@ public class TransportGetAction extends TransportSingleShardAction<GetRequest, G
                 request.fetchSourceContext(),
                 request.isForceSyntheticSource()
             );
+        logger.info(
+            "--> shardOperation result id [{}], exists [{}], [{}]",
+            result.getId(),
+            result.isExists(),
+            Thread.currentThread().getName()
+        );
         return new GetResponse(result);
     }
 

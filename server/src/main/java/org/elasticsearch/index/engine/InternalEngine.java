@@ -873,6 +873,7 @@ public class InternalEngine extends Engine {
         assert get.realtime();
         final VersionValue versionValue;
         try (Releasable ignore = versionMap.acquireLock(get.uid().bytes())) {
+            logger.info("--> getVersionFromMap [{}] [{}]", get.id(), Thread.currentThread().getName());
             // we need to lock here to access the version map to do this truly in RT
             versionValue = getVersionFromMap(get.uid().bytes());
         }
@@ -913,6 +914,7 @@ public class InternalEngine extends Engine {
             }
             if (get.isReadFromTranslog()) {
                 if (versionValue.getLocation() != null) {
+                    logger.info("--> versionValue.getLocation() != null [{}] [{}]", get.id(), Thread.currentThread().getName());
                     try {
                         final Translog.Operation operation = translog.readOperation(versionValue.getLocation());
                         if (operation != null) {
@@ -923,14 +925,17 @@ public class InternalEngine extends Engine {
                         throw new EngineException(shardId, "failed to read operation from translog", e);
                     }
                 } else {
+                    logger.info("--> set trackTranslogLocation [{}] [{}]", get.id(), Thread.currentThread().getName());
                     // We need to start tracking translog locations in the live version map.
                     trackTranslogLocation.set(true);
                 }
             }
             assert versionValue.seqNo >= 0 : versionValue;
+            logger.info("--> refreshIfNeeded [{}] [{}]", get.id(), Thread.currentThread().getName());
             refreshIfNeeded(REAL_TIME_GET_REFRESH_SOURCE, versionValue.seqNo);
         }
         if (getFromSearcherIfNotInTranslog) {
+            logger.info("--> getFromSearcherIfNotInTranslog [{}] [{}]", get.id(), Thread.currentThread().getName());
             return getFromSearcher(get, acquireSearcher("realtime_get", SearcherScope.INTERNAL, searcherWrapper), false);
         }
         return null;
@@ -1040,12 +1045,24 @@ public class InternalEngine extends Engine {
                 // map so once we pass this point we can safely lookup from the version map.
                 if (versionMap.isUnsafe()) {
                     lastUnsafeSegmentGenerationForGets.set(lastCommittedSegmentInfos.getGeneration() + 1);
+                    logger.info(
+                        "--> versionMap is unsafe, set lastUnsafeGenForGets to [{}] [{}]",
+                        lastUnsafeSegmentGenerationForGets.get(),
+                        Thread.currentThread().getName()
+                    );
                     refreshInternalSearcher(UNSAFE_VERSION_MAP_REFRESH_SOURCE, true);
+                    logger.info(
+                        "--> after refreshInternalSearcher versionMap isUnsafe [{}], [{}]",
+                        versionMap.isUnsafe(),
+                        Thread.currentThread().getName()
+                    );
                 }
                 versionMap.enforceSafeAccess();
             }
         }
-        return versionMap.getUnderLock(id);
+        final VersionValue underLock = versionMap.getUnderLock(id);
+        logger.info("--> versionValue underLock is null [{}] [{}]", underLock == null, Thread.currentThread().getName());
+        return underLock;
     }
 
     private boolean canOptimizeAddDocument(Index index) {
@@ -2035,6 +2052,12 @@ public class InternalEngine extends Engine {
                     } else {
                         refreshed = referenceManager.maybeRefresh();
                     }
+                    logger.info(
+                        "--> inside refresh of blocking [{}] refreshed [{}], [{}]",
+                        block,
+                        refreshed,
+                        Thread.currentThread().getName()
+                    );
                     if (refreshed) {
                         final ElasticsearchDirectoryReader current = referenceManager.acquire();
                         try {
@@ -2209,10 +2232,17 @@ public class InternalEngine extends Engine {
                         // we clear them from the archive once we see that segment generation on the search shards, but those changes
                         // were not included in the commit since they happened right after it.
                         preCommitSegmentGeneration.set(lastCommittedSegmentInfos.getGeneration() + 1);
+                        logger.info(
+                            "--> flush before commit with preCommitGen [{}] [{}]",
+                            preCommitSegmentGeneration.get(),
+                            Thread.currentThread().getName()
+                        );
                         commitIndexWriter(indexWriter, translog);
                         logger.trace("finished commit for flush");
+                        logger.info("--> flush after commit before refresh [{}]", Thread.currentThread().getName());
                         // we need to refresh in order to clear older version values
                         refresh("version_table_flush", SearcherScope.INTERNAL, true);
+                        logger.info("--> flush after refresh [{}]", Thread.currentThread().getName());
                         translog.trimUnreferencedReaders();
                         // Use the timestamp from when the flush started, but only update it in case of success, so that any exception in
                         // the above lines would not lead the engine to think that it recently flushed, when it did not.

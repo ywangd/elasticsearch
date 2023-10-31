@@ -8,6 +8,8 @@
 
 package org.elasticsearch.index.engine;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.search.ReferenceManager;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
@@ -23,6 +25,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /** Maps _uid value to its version information. */
 public final class LiveVersionMap implements ReferenceManager.RefreshListener, Accountable {
+
+    private static final Logger logger = LogManager.getLogger(LiveVersionMap.class);
 
     private final KeyedLock<BytesRef> keyedLock = new KeyedLock<>();
 
@@ -262,6 +266,12 @@ public final class LiveVersionMap implements ReferenceManager.RefreshListener, A
         // try this new map, then fallback to old, then to the
         // current searcher:
         maps = maps.buildTransitionMap();
+        logger.info(
+            "--> beforeRefresh maps.current isUnsafe [{}], maps.old isUnsafe [{}], [{}]",
+            maps.current.isUnsafe(),
+            maps.old.isUnsafe(),
+            Thread.currentThread().getName()
+        );
         assert (unsafeKeysMap = unsafeKeysMap.buildTransitionMap()) != null;
         // This is not 100% correct, since concurrent indexing ops can change these counters in between our execution of the previous
         // line and this one, but that should be minor, and the error won't accumulate over time:
@@ -277,6 +287,12 @@ public final class LiveVersionMap implements ReferenceManager.RefreshListener, A
         // reflected in the previous reader. We don't touch tombstones here: they expire on their own index.gc_deletes timeframe:
 
         maps = maps.invalidateOldMap(archive);
+        logger.info(
+            "--> afterRefresh maps.current isUnsafe [{}], maps.old isUnsafe [{}], [{}]",
+            maps.current.isUnsafe(),
+            maps.old.isUnsafe(),
+            Thread.currentThread().getName()
+        );
         assert (unsafeKeysMap = unsafeKeysMap.invalidateOldMapForAssert()) != null;
 
     }
@@ -337,6 +353,7 @@ public final class LiveVersionMap implements ReferenceManager.RefreshListener, A
     void maybePutIndexUnderLock(BytesRef uid, IndexVersionValue version) {
         assert assertKeyedLockHeldByCurrentThread(uid);
         Maps maps = this.maps;
+        logger.info("--> maybePutIndexUnderLock isSafe [{}] [{}]", maps.isSafeAccessMode(), Thread.currentThread().getName());
         if (maps.isSafeAccessMode()) {
             putIndexUnderLock(uid, version);
         } else {
