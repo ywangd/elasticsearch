@@ -1044,16 +1044,21 @@ public class InternalEngine extends Engine {
                 // but we only need to do this once since the last operation per ID is to add to the version
                 // map so once we pass this point we can safely lookup from the version map.
                 if (versionMap.isUnsafe()) {
-                    lastUnsafeSegmentGenerationForGets.set(lastCommittedSegmentInfos.getGeneration() + 1);
                     logger.info(
-                        "--> versionMap is unsafe, set lastUnsafeGenForGets to [{}] [{}]",
-                        lastUnsafeSegmentGenerationForGets.get(),
+                        "--> refreshInternalSearcher: preCommitGen [{}], lastCommittedGen [{}], [{}]",
+                        preCommitSegmentGeneration.get(),
+                        lastCommittedSegmentInfos.getGeneration(),
                         Thread.currentThread().getName()
                     );
                     refreshInternalSearcher(UNSAFE_VERSION_MAP_REFRESH_SOURCE, true);
+                    lastUnsafeSegmentGenerationForGets.set(lastCommittedSegmentInfos.getGeneration());
                     logger.info(
-                        "--> after refreshInternalSearcher versionMap isUnsafe [{}], [{}]",
+                        "--> refreshInternalSearcher: versionMap isUnsafe [{}], lastUnsafeGen [{}], "
+                            + "preCommitGen [{}], lastCommittedGen [{}], [{}]",
                         versionMap.isUnsafe(),
+                        lastUnsafeSegmentGenerationForGets.get(),
+                        preCommitSegmentGeneration.get(),
+                        getLastCommittedSegmentInfos().getGeneration(),
                         Thread.currentThread().getName()
                     );
                 }
