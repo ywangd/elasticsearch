@@ -8,6 +8,8 @@
 
 package org.elasticsearch.common.blobstore.fs;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.blobstore.BlobPath;
@@ -64,6 +66,8 @@ public class FsBlobStore implements BlobStore {
         return new FsBlobContainer(this, path, f);
     }
 
+    private static final Logger logger = LogManager.getLogger(FsBlobStore.class);
+
     @Override
     public void deleteBlobsIgnoringIfNotExists(OperationPurpose purpose, Iterator<String> blobNames) throws IOException {
         IOException ioe = null;
@@ -73,6 +77,7 @@ public class FsBlobStore implements BlobStore {
                 // FsBlobContainer uses this method to delete blobs; in that case each blob name is already an absolute path meaning that
                 // the resolution done here is effectively a non-op.
                 Path resolve = path.resolve(blobNames.next());
+                logger.info("--> deleting file [{}]", resolve);
                 IOUtils.rm(resolve);
             } catch (IOException e) {
                 // IOUtils.rm puts the original exception as a string in the IOException message. Ignore no such file exception.
