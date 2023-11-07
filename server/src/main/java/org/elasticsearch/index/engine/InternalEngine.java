@@ -1039,6 +1039,7 @@ public class InternalEngine extends Engine {
                 // but we only need to do this once since the last operation per ID is to add to the version
                 // map so once we pass this point we can safely lookup from the version map.
                 if (versionMap.isUnsafe()) {
+                    logger.info("--> refreshInternalSearcher for realtime-get [{}]", Thread.currentThread().getName());
                     refreshInternalSearcher(UNSAFE_VERSION_MAP_REFRESH_SOURCE, true);
                     // After the refresh, the doc that triggered it must now be part of the last commit.
                     // In rare cases, there could be other flush cycles completed in between the above line
@@ -2218,6 +2219,11 @@ public class InternalEngine extends Engine {
                         // we clear them from the archive once we see that segment generation on the search shards, but those changes
                         // were not included in the commit since they happened right after it.
                         preCommitSegmentGeneration.set(lastCommittedSegmentInfos.getGeneration() + 1);
+                        logger.info(
+                            "--> committing with preCommitGen [{}], [{}]",
+                            preCommitSegmentGeneration.get(),
+                            Thread.currentThread().getName()
+                        );
                         commitIndexWriter(indexWriter, translog);
                         logger.trace("finished commit for flush");
                         // we need to refresh in order to clear older version values
