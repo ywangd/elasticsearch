@@ -398,6 +398,7 @@ public class InternalEngine extends Engine {
             ) {
                 final long nextGen = indexCommitRef.getIndexCommit().getGeneration();
                 final long prevGen = generation.getAndSet(nextGen);
+                logger.info("--> assertingCommitsOrderListener: prevGen [{}], nextGen [{}]", prevGen, nextGen);
                 assert prevGen < nextGen
                     : "Expect new commit generation "
                         + nextGen
