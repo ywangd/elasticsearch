@@ -2488,7 +2488,9 @@ public class InternalEngine extends Engine {
             try {
                 // Here we don't have to trim translog because snapshotting an index commit
                 // does not lock translog or prevents unreferenced files from trimming.
+                logger.info("--> before deleteUnusedFiles: gen [{}], [{}}", snapshot.getGeneration(), Thread.currentThread().getName());
                 indexWriter.deleteUnusedFiles();
+                logger.info("--> after deleteUnusedFiles gen [{}], [{}]", snapshot.getGeneration(), Thread.currentThread().getName());
             } catch (AlreadyClosedException ignored) {
                 // That's ok, we'll clean up unused files the next time it's opened.
             }
