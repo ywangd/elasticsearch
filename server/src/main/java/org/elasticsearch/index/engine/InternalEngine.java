@@ -874,7 +874,7 @@ public class InternalEngine extends Engine {
         final VersionValue versionValue;
         try (Releasable ignore = versionMap.acquireLock(get.uid().bytes())) {
             // we need to lock here to access the version map to do this truly in RT
-            versionValue = getVersionFromMap(get.uid().bytes());
+            versionValue = getVersionFromMap(get.uid().bytes(), get.id());
         }
         boolean getFromSearcherIfNotInTranslog = getFromSearcher;
         if (versionValue != null) {
@@ -972,7 +972,7 @@ public class InternalEngine extends Engine {
     private OpVsLuceneDocStatus compareOpToLuceneDocBasedOnSeqNo(final Operation op) throws IOException {
         assert op.seqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO : "resolving ops based on seq# but no seqNo is found";
         final OpVsLuceneDocStatus status;
-        VersionValue versionValue = getVersionFromMap(op.uid().bytes());
+        VersionValue versionValue = getVersionFromMap(op.uid().bytes(), op.id());
         assert incrementVersionLookup();
         if (versionValue != null) {
             status = compareOpToVersionMapOnSeqNo(op.id(), op.seqNo(), op.primaryTerm(), versionValue);
@@ -1000,7 +1000,7 @@ public class InternalEngine extends Engine {
     /** resolves the current version of the document, returning null if not found */
     private VersionValue resolveDocVersion(final Operation op, boolean loadSeqNo) throws IOException {
         assert incrementVersionLookup(); // used for asserting in tests
-        VersionValue versionValue = getVersionFromMap(op.uid().bytes());
+        VersionValue versionValue = getVersionFromMap(op.uid().bytes(), op.id());
         if (versionValue == null) {
             assert incrementIndexVersionLookup(); // used for asserting in tests
             final VersionsAndSeqNoResolver.DocIdAndVersion docIdAndVersion;
@@ -1032,13 +1032,14 @@ public class InternalEngine extends Engine {
         return versionValue;
     }
 
-    private VersionValue getVersionFromMap(BytesRef id) {
+    private VersionValue getVersionFromMap(BytesRef id, String docId) {
         if (versionMap.isUnsafe()) {
             synchronized (versionMap) {
                 // we are switching from an unsafe map to a safe map. This might happen concurrently
                 // but we only need to do this once since the last operation per ID is to add to the version
                 // map so once we pass this point we can safely lookup from the version map.
                 if (versionMap.isUnsafe()) {
+                    logger.info("--> GET id [{}] before refreshInternalSearcher, [{}]", docId, Thread.currentThread().getName());
                     refreshInternalSearcher(UNSAFE_VERSION_MAP_REFRESH_SOURCE, true);
                     // After the refresh, the doc that triggered it must now be part of the last commit.
                     // In rare cases, there could be other flush cycles completed in between the above line
@@ -1048,6 +1049,12 @@ public class InternalEngine extends Engine {
                     // which means the search shard needs to wait for extra generations and these generations
                     // are guaranteed to happen since they are all committed.
                     lastUnsafeSegmentGenerationForGets.set(lastCommittedSegmentInfos.getGeneration());
+                    logger.info(
+                        "--> GET id [{}] set lastUnsafeGen [{}], [{}]",
+                        docId,
+                        lastUnsafeSegmentGenerationForGets.get(),
+                        Thread.currentThread().getName()
+                    );
                 }
                 versionMap.enforceSafeAccess();
             }
