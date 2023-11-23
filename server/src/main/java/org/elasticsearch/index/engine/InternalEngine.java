@@ -1059,6 +1059,13 @@ public class InternalEngine extends Engine {
                 versionMap.enforceSafeAccess();
             }
             // The versionMap can still be unsafe at this point due to archive being unsafe
+        } else {
+            logger.info(
+                "--> GET id [{}] with existing lastUnsafeGen [{}], [{}]",
+                docId,
+                lastUnsafeSegmentGenerationForGets.get(),
+                Thread.currentThread().getName()
+            );
         }
         return versionMap.getUnderLock(id);
     }
