@@ -2790,6 +2790,7 @@ public class InternalEngine extends Engine {
 
         @Override
         public synchronized void beforeMerge(OnGoingMerge merge) {
+            logger.info("--> beforeMerge: shard {}, [{}]", shardId, Thread.currentThread().getName());
             int maxNumMerges = mergeScheduler.getMaxMergeCount();
             if (numMergesInFlight.incrementAndGet() > maxNumMerges) {
                 if (isThrottling.getAndSet(true) == false) {
