@@ -1320,13 +1320,15 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
             if (getChecksum() == storedChecksum) {
                 return storedChecksum;
             }
-            throw new CorruptIndexException(
+            final CorruptIndexException e = new CorruptIndexException(
                 "verification failed : calculated="
                     + Store.digestToString(getChecksum())
                     + " stored="
                     + Store.digestToString(storedChecksum),
                 this
             );
+            assert false : e;
+            throw e;
         }
 
     }
