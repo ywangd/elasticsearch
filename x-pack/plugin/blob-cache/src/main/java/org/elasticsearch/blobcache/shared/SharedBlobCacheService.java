@@ -474,6 +474,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                     regionListener.onResponse(0);
                     return false;
                 }
+                logger.info("--> maybeFetchFullEntry: [{}], length={}, [{}]", cacheKey, length, Thread.currentThread().getName());
                 // set read range == write range so the listener completes only once all the bytes have been downloaded
                 entry.populateAndRead(
                     rangeToWrite,

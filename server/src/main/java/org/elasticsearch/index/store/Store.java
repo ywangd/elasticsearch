@@ -1327,10 +1327,11 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
             }
 
             logger.info(
-                "--> failed to verify calculated={}, stored={} for [{}]",
+                "--> failed to verify calculated={}, stored={} for [{}], [{}]",
                 Store.digestToString(calculatedChecksum),
                 Store.digestToString(storedChecksum),
-                input
+                input,
+                Thread.currentThread().getName()
             );
             final Class<? extends IndexInput> inputClass = input.getClass();
             try {
