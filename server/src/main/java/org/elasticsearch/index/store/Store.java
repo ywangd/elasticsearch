@@ -8,6 +8,7 @@
 
 package org.elasticsearch.index.store;
 
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.index.CheckIndex;
@@ -74,6 +75,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -1199,6 +1202,7 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
      * the first read. All consecutive reads of the same data are not used to calculate the checksum.
      */
     static class VerifyingIndexInput extends ChecksumIndexInput {
+        private static final Logger logger = LogManager.getLogger(VerifyingIndexInput.class);
         private final IndexInput input;
         private final Checksum digest;
         private final long checksumPosition;
@@ -1317,18 +1321,35 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
 
         public long verify() throws CorruptIndexException {
             long storedChecksum = getStoredChecksum();
-            if (getChecksum() == storedChecksum) {
+            final long calculatedChecksum = getChecksum();
+            if (calculatedChecksum == storedChecksum) {
                 return storedChecksum;
             }
+
+            logger.info(
+                "--> failed to verify calculated={}, stored={} for [{}]",
+                Store.digestToString(calculatedChecksum),
+                Store.digestToString(storedChecksum),
+                input
+            );
+            final Class<? extends IndexInput> inputClass = input.getClass();
+            try {
+                logger.info("--> attempt to run diagnosis for [{}]", input);
+                final Method method = inputClass.getDeclaredMethod("diagnose");
+                method.invoke(input);
+            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+                logger.info("--> cannot call method reflectively", e);
+                // ignore
+            }
+
             throw new CorruptIndexException(
                 "verification failed : calculated="
-                    + Store.digestToString(getChecksum())
+                    + Store.digestToString(calculatedChecksum)
                     + " stored="
                     + Store.digestToString(storedChecksum),
                 this
             );
         }
-
     }
 
     public void deleteQuiet(String... files) {
