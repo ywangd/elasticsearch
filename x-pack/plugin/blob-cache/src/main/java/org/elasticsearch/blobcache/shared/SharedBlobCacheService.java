@@ -284,7 +284,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
     private final ByteSizeValue rangeSize;
     private final ByteSizeValue recoveryRangeSize;
 
-    private final int numRegions;
+    public final int numRegions;
     private final ConcurrentLinkedQueue<SharedBytes.IO> freeRegions = new ConcurrentLinkedQueue<>();
 
     private final Cache<KeyType, CacheFileRegion> cache;
@@ -545,7 +545,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
         sharedBytes.decRef();
     }
 
-    private record RegionKey<KeyType>(KeyType file, int region) {
+    public record RegionKey<KeyType>(KeyType file, int region) {
         @Override
         public String toString() {
             return "Chunk{" + "file=" + file + ", region=" + region + '}';
@@ -597,9 +597,14 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
 
     public class CacheFileRegion extends EvictableRefCounted {
 
-        final RegionKey<KeyType> regionKey;
+        public final RegionKey<KeyType> regionKey;
         final SparseFileTracker tracker;
         volatile SharedBytes.IO io = null;
+
+        @Override
+        public String toString() {
+            return "CacheFileRegion{" + "regionKey=" + regionKey + ", io=" + io + '}';
+        }
 
         CacheFileRegion(RegionKey<KeyType> regionKey, int regionSize) {
             this.regionKey = regionKey;
@@ -645,6 +650,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
             if (io != null) {
                 assert regionOwners.remove(io) == this;
                 freeRegions.add(io);
+                logger.info("--> closeInternal: regionKey=[{}], io=[{}], [{}]", regionKey, io, Thread.currentThread().getName());
             }
             logger.trace("closed {} with channel offset {}", regionKey, physicalStartOffset());
         }
@@ -684,7 +690,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                 final List<SparseFileTracker.Gap> gaps = tracker.waitForRange(
                     rangeToWrite,
                     rangeToRead,
-                    ActionListener.runBefore(listener, resource::close).delegateFailureAndWrap((l, success) -> {
+                    ActionListener.runAfter(listener, resource::close).delegateFailureAndWrap((l, success) -> {
                         var ioRef = io;
                         assert regionOwners.get(ioRef) == this;
                         final int start = Math.toIntExact(rangeToRead.start());
