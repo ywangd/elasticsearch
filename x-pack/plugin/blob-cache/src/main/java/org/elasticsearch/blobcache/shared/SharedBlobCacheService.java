@@ -289,7 +289,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
 
     private final Cache<KeyType, CacheFileRegion> cache;
 
-    private final ConcurrentHashMap<SharedBytes.IO, CacheFileRegion> regionOwners; // to assert exclusive access of regions
+    public final ConcurrentHashMap<SharedBytes.IO, CacheFileRegion> regionOwners; // to assert exclusive access of regions
 
     private final LongAdder writeCount = new LongAdder();
     private final LongAdder writeBytes = new LongAdder();
@@ -595,7 +595,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
         }
     }
 
-    class CacheFileRegion extends EvictableRefCounted {
+    public class CacheFileRegion extends EvictableRefCounted {
 
         final RegionKey<KeyType> regionKey;
         final SparseFileTracker tracker;
@@ -620,6 +620,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                 logger.trace("evicted {} with channel offset {}", regionKey, physicalStartOffset());
                 evictCount.increment();
                 decRef();
+                logger.info("--> tryEvicted: regionKey=[{}], io=[{}]", regionKey, io);
                 return true;
             }
             return false;
@@ -631,6 +632,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                 logger.trace("force evicted {} with channel offset {}", regionKey, physicalStartOffset());
                 evictCount.increment();
                 decRef();
+                logger.info("--> forceEvicted: regionKey=[{}], io=[{}]", regionKey, io);
                 return true;
             }
             return false;
@@ -719,13 +721,9 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                         final int start = Math.toIntExact(gap.start());
                         var ioRef = io;
                         assert regionOwners.get(ioRef) == CacheFileRegion.this;
-                        writer.fillCacheRange(
-                            ioRef,
-                            start,
-                            start,
-                            Math.toIntExact(gap.end() - start),
-                            progress -> gap.onProgress(start + progress)
-                        );
+                        final int length = Math.toIntExact(gap.end() - start);
+                        logger.info("--> fillGaps: region key [{}], start={}, length={}", CacheFileRegion.this.regionKey, start, length);
+                        writer.fillCacheRange(ioRef, start, start, length, progress -> gap.onProgress(start + progress));
                         writeCount.increment();
 
                         gap.onCompletion();
@@ -778,7 +776,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
             return cacheKey;
         }
 
-        public boolean tryRead(ByteBuffer buf, long offset) throws IOException {
+        public boolean tryRead(ByteBuffer buf, long offset, boolean isCfsFile, String name) throws IOException {
             final int startRegion = getRegion(offset);
             final long end = offset + buf.remaining();
             final int endRegion = getEndingRegion(end);
@@ -794,11 +792,23 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                 fileRegion = cache.get(cacheKey, length, startRegion);
             }
             final var region = fileRegion.chunk;
-            if (region.tracker.checkAvailable(end - getRegionStart(startRegion)) == false) {
+            final long regionStart = getRegionStart(startRegion);
+            if (region.tracker.checkAvailable(end - regionStart) == false) {
                 return false;
             }
             boolean res = region.tryRead(buf, offset);
+            if (isCfsFile && res) {
+                logger.info(
+                    "--> tryRead: succeeded for file=[{}], cacheKey=[{}], io=[{}], offset={}, regionKey=[{}]",
+                    name,
+                    cacheKey,
+                    fileRegion.chunk.io,
+                    offset,
+                    region.regionKey
+                );
+            }
             lastAccessedRegion = res ? fileRegion : null;
+            assert res == false || region.tracker.checkAvailable(end - regionStart) : "tracker inconsistency";
             return res;
         }
 
@@ -1030,12 +1040,18 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
             if (entry == null) {
                 final int effectiveRegionSize = getRegionSize(fileLength, region);
                 entry = keyMapping.computeIfAbsent(regionKey, key -> new LFUCacheEntry(new CacheFileRegion(key, effectiveRegionSize), now));
+                logger.info("--> putKeyMapping: regionKey=[{}]", regionKey);
+            } else {
+                assert entry.chunk.regionKey.equals(regionKey) : entry.chunk.regionKey + " != " + regionKey;
+                logger.info("--> getKeyMapping: regionKey=[{}], chunk.io=[{}]", regionKey, entry.chunk.io);
             }
             // io is volatile, double locking is fine, as long as we assign it last.
             if (entry.chunk.io == null) {
                 synchronized (entry.chunk) {
                     if (entry.chunk.io == null) {
-                        return initChunk(entry);
+                        final LFUCacheEntry lfuCacheEntry = initChunk(entry);
+                        logger.info("--> initChunk: regionKey=[{}], chunk.io=[{}]", regionKey, lfuCacheEntry.chunk.io);
+                        return lfuCacheEntry;
                     }
                 }
             }

@@ -106,7 +106,7 @@ public final class FrozenIndexInput extends MetadataCachingIndexInput {
     protected void readWithoutBlobCache(ByteBuffer b) throws Exception {
         final long position = getAbsolutePosition();
         final int length = b.remaining();
-        if (cacheFile.tryRead(b, position)) {
+        if (cacheFile.tryRead(b, position, false, "")) {
             // fast-path succeeded, increment stats and return
             stats.addCachedBytesRead(length);
             return;

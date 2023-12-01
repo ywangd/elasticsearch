@@ -27,6 +27,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Objects;
 import java.util.function.IntConsumer;
 
 public class SharedBytes extends AbstractRefCounted {
@@ -242,9 +243,20 @@ public class SharedBytes extends AbstractRefCounted {
 
     public final class IO {
 
-        private final long pageStart;
+        public final long pageStart;
 
         private final MappedByteBuffer mappedByteBuffer;
+
+        @Override
+        public String toString() {
+            return "IO{"
+                + System.identityHashCode(this)
+                + ", pageStart="
+                + pageStart
+                + ", mappedByteBuffer="
+                + System.identityHashCode(mappedByteBuffer)
+                + '}';
+        }
 
         private IO(final int sharedBytesPos, MappedByteBuffer mappedByteBuffer) {
             long physicalOffset = (long) sharedBytesPos * regionSize;
@@ -262,7 +274,15 @@ public class SharedBytes extends AbstractRefCounted {
                 bytesRead = remaining;
                 int startPosition = dst.position();
                 dst.put(startPosition, mappedByteBuffer, position, bytesRead).position(startPosition + bytesRead);
+                logger.info(
+                    "--> IO.read: from [{}], position={}, bytesRead={} into dst startPosition={}",
+                    this,
+                    position,
+                    bytesRead,
+                    startPosition
+                );
             } else {
+                assert false;
                 bytesRead = fileChannel.read(dst, pageStart + position);
             }
             readBytes.accept(bytesRead);
