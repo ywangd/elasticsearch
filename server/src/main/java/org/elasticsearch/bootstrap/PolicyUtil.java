@@ -133,12 +133,9 @@ public class PolicyUtil {
             new AuthPermission("setLoginConfiguration"),
             new AuthPermission("createLoginConfiguration.*"),
             new AuthPermission("refreshLoginConfiguration"),
-            new MBeanPermission(
-                "*",
-                "*",
-                ObjectName.WILDCARD,
-                "addNotificationListener,getAttribute,getDomains,getMBeanInfo,getObjectInstance,instantiate,invoke,"
-                    + "isInstanceOf,queryMBeans,queryNames,registerMBean,removeNotificationListener,setAttribute,unregisterMBean"
+            new MBeanPermission("*", "*", ObjectName.WILDCARD, "*"
+            // "addNotificationListener,getAttribute,getDomains,getMBeanInfo,getObjectInstance,instantiate,invoke,"
+            // + "isInstanceOf,queryMBeans,queryNames,registerMBean,removeNotificationListener,setAttribute,unregisterMBean"
             ),
             new MBeanServerPermission("*"),
             new MBeanTrustPermission("register")

@@ -620,7 +620,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                 logger.trace("evicted {} with channel offset {}", regionKey, physicalStartOffset());
                 evictCount.increment();
                 decRef();
-                logger.info("--> tryEvicted: regionKey=[{}], io=[{}]", regionKey, io);
+                logger.info("--> tryEvicted: regionKey=[{}], io=[{}], [{}]", regionKey, io, Thread.currentThread().getName());
                 return true;
             }
             return false;
@@ -632,7 +632,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                 logger.trace("force evicted {} with channel offset {}", regionKey, physicalStartOffset());
                 evictCount.increment();
                 decRef();
-                logger.info("--> forceEvicted: regionKey=[{}], io=[{}]", regionKey, io);
+                logger.info("--> forceEvicted: regionKey=[{}], io=[{}], [{}]", regionKey, io, Thread.currentThread().getName());
                 return true;
             }
             return false;
@@ -722,7 +722,13 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                         var ioRef = io;
                         assert regionOwners.get(ioRef) == CacheFileRegion.this;
                         final int length = Math.toIntExact(gap.end() - start);
-                        logger.info("--> fillGaps: region key [{}], start={}, length={}", CacheFileRegion.this.regionKey, start, length);
+                        logger.info(
+                            "--> fillGaps: region key [{}], start={}, length={}, [{}]",
+                            CacheFileRegion.this.regionKey,
+                            start,
+                            length,
+                            Thread.currentThread().getName()
+                        );
                         writer.fillCacheRange(ioRef, start, start, length, progress -> gap.onProgress(start + progress));
                         writeCount.increment();
 
@@ -1040,17 +1046,27 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
             if (entry == null) {
                 final int effectiveRegionSize = getRegionSize(fileLength, region);
                 entry = keyMapping.computeIfAbsent(regionKey, key -> new LFUCacheEntry(new CacheFileRegion(key, effectiveRegionSize), now));
-                logger.info("--> putKeyMapping: regionKey=[{}]", regionKey);
+                logger.info("--> putKeyMapping: regionKey=[{}], [{}]", regionKey, Thread.currentThread().getName());
             } else {
                 assert entry.chunk.regionKey.equals(regionKey) : entry.chunk.regionKey + " != " + regionKey;
-                logger.info("--> getKeyMapping: regionKey=[{}], chunk.io=[{}]", regionKey, entry.chunk.io);
+                logger.info(
+                    "--> getKeyMapping: regionKey=[{}], chunk.io=[{}], [{}]",
+                    regionKey,
+                    entry.chunk.io,
+                    Thread.currentThread().getName()
+                );
             }
             // io is volatile, double locking is fine, as long as we assign it last.
             if (entry.chunk.io == null) {
                 synchronized (entry.chunk) {
                     if (entry.chunk.io == null) {
                         final LFUCacheEntry lfuCacheEntry = initChunk(entry);
-                        logger.info("--> initChunk: regionKey=[{}], chunk.io=[{}]", regionKey, lfuCacheEntry.chunk.io);
+                        logger.info(
+                            "--> initChunk: regionKey=[{}], chunk.io=[{}], [{}]",
+                            regionKey,
+                            lfuCacheEntry.chunk.io,
+                            Thread.currentThread().getName()
+                        );
                         return lfuCacheEntry;
                     }
                 }

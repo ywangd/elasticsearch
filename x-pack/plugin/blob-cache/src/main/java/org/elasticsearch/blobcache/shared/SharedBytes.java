@@ -27,7 +27,6 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.Objects;
 import java.util.function.IntConsumer;
 
 public class SharedBytes extends AbstractRefCounted {
@@ -88,6 +87,7 @@ public class SharedBytes extends AbstractRefCounted {
             }
         }
         this.path = cacheFile;
+        logger.info("--> SharedBytes: numRegions={}, regionSize={}, path={}", this.numRegions, this.regionSize, this.path);
         this.mmap = mmap;
         this.ios = new IO[numRegions];
         if (mmap && fileSize > 0) {
