@@ -274,14 +274,14 @@ public class SharedBytes extends AbstractRefCounted {
                 bytesRead = remaining;
                 int startPosition = dst.position();
                 dst.put(startPosition, mappedByteBuffer, position, bytesRead).position(startPosition + bytesRead);
-                logger.info(
-                    "--> IO.read: from [{}], position={}, bytesRead={} into dst startPosition={}, [{}]",
-                    this,
-                    position,
-                    bytesRead,
-                    startPosition,
-                    Thread.currentThread().getName()
-                );
+//                logger.info(
+//                    "--> IO.read: from [{}], position={}, bytesRead={} into dst startPosition={}, [{}]",
+//                    this,
+//                    position,
+//                    bytesRead,
+//                    startPosition,
+//                    Thread.currentThread().getName()
+//                );
             } else {
                 assert false;
                 bytesRead = fileChannel.read(dst, pageStart + position);

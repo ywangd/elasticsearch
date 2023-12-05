@@ -77,7 +77,7 @@ public abstract class BlobCacheBufferedIndexInput extends IndexInput implements 
 
     @Override
     public final void readBytes(byte[] b, int offset, int len) throws IOException {
-        readBytes(b, offset, len, true);
+        readBytes(b, offset, len, true && false);
     }
 
     @Override
