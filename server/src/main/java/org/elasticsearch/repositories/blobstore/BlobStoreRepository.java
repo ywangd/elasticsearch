@@ -3721,10 +3721,11 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 final long startMS = threadPool.relativeTimeInMillis();
                 shardContainer.writeBlob(OperationPurpose.SNAPSHOT, partName, inputStream, partBytes, false);
                 logger.info(
-                    "[{}] Writing [{}][{}] of size [{}b] to [{}] took [{}ms]",
+                    "[{}] Writing [{}][{}][{}] of size [{}b] to [{}] took [{}ms]",
                     metadata,
                     file,
                     partName,
+                    shardId,
                     partBytes,
                     shardContainer.path(),
                     threadPool.relativeTimeInMillis() - startMS
