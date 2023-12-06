@@ -1054,7 +1054,7 @@ public final class InternalTestCluster extends TestCluster {
                 resetClient();
             } finally {
                 closed.set(true);
-                markNodeDataDirsAsPendingForWipe();
+//                markNodeDataDirsAsPendingForWipe();
                 node.close();
                 try {
                     if (node.awaitClose(10, TimeUnit.SECONDS) == false) {

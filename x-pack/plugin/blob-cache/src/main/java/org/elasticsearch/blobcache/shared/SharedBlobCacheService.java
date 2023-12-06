@@ -324,7 +324,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
         this.ioExecutor = threadPool.executor(ioExecutor);
         this.bulkIOExecutor = threadPool.executor(bulkExecutor);
         if (this.ioExecutor.toString().contains("name = node_t0/stateless_shard")) {
-            this.shouldLog = true;
+            this.shouldLog = true && Boolean.parseBoolean(System.getProperty("es.should_log", "true"));
         } else {
             this.shouldLog = false;
         }
@@ -669,9 +669,9 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
             if (io != null) {
                 assert regionOwners.remove(io) == this;
                 freeRegions.add(io);
-                if (shouldLog) {
-                    logger.info("--> closeInternal: {}, [{}]", this, Thread.currentThread().getName());
-                }
+            }
+            if (shouldLog) {
+                logger.info("--> closeInternal: {}, [{}]", this, Thread.currentThread().getName());
             }
             logger.trace("closed {} with channel offset {}", regionKey, physicalStartOffset());
         }
@@ -833,7 +833,8 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
             final boolean trackerAvailable = region.tracker.checkAvailable(end - regionStart);
             if (shouldLog) {
                 logger.info(
-                    "--> tryRead: isLastAccessed={}, cacheFileRegion=[{}], [{}]",
+                    "--> tryRead: offset={}, isLastAccessed={}, cacheFileRegion=[{}], [{}]",
+                    offset,
                     fileRegion == lastAccessedRegion,
                     region,
                     Thread.currentThread().getName()

@@ -3720,9 +3720,10 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 logger.trace("[{}] Writing [{}] to [{}]", metadata.name(), partName, shardContainer.path());
                 final long startMS = threadPool.relativeTimeInMillis();
                 shardContainer.writeBlob(OperationPurpose.SNAPSHOT, partName, inputStream, partBytes, false);
-                logger.trace(
-                    "[{}] Writing [{}] of size [{}b] to [{}] took [{}ms]",
-                    metadata.name(),
+                logger.info(
+                    "[{}] Writing [{}][{}] of size [{}b] to [{}] took [{}ms]",
+                    metadata,
+                    file,
                     partName,
                     partBytes,
                     shardContainer.path(),
