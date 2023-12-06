@@ -3221,14 +3221,14 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 snapshotStatus.moveToDone(threadPool.absoluteTimeInMillis(), shardSnapshotResult);
                 context.onResponse(shardSnapshotResult);
             }, e -> {
-                try {
-                    shardContainer.deleteBlobsIgnoringIfNotExists(
-                        OperationPurpose.SNAPSHOT,
-                        Iterators.flatMap(fileToCleanUp.get().iterator(), f -> Iterators.forRange(0, f.numberOfParts(), f::partName))
-                    );
-                } catch (Exception innerException) {
-                    e.addSuppressed(innerException);
-                }
+                // try {
+                // shardContainer.deleteBlobsIgnoringIfNotExists(
+                // OperationPurpose.SNAPSHOT,
+                // Iterators.flatMap(fileToCleanUp.get().iterator(), f -> Iterators.forRange(0, f.numberOfParts(), f::partName))
+                // );
+                // } catch (Exception innerException) {
+                // e.addSuppressed(innerException);
+                // }
                 context.onFailure(e);
             }));
 
@@ -3721,11 +3721,12 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 final long startMS = threadPool.relativeTimeInMillis();
                 shardContainer.writeBlob(OperationPurpose.SNAPSHOT, partName, inputStream, partBytes, false);
                 logger.info(
-                    "[{}] Writing [{}][{}][{}] of size [{}b] to [{}] took [{}ms]",
+                    "[{}] Writing [{}][{}][{}][{}] of size [{}b] to [{}] took [{}ms]",
                     metadata,
                     file,
                     partName,
                     shardId,
+                    shardId.getIndex().getUUID(),
                     partBytes,
                     shardContainer.path(),
                     threadPool.relativeTimeInMillis() - startMS
