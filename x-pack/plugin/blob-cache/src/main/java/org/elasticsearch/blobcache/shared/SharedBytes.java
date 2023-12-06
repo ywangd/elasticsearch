@@ -230,7 +230,8 @@ public class SharedBytes extends AbstractRefCounted {
     @Override
     protected void closeInternal() {
         try {
-            IOUtils.close(fileChannel, path == null ? null : () -> Files.deleteIfExists(path));
+            // IOUtils.close(fileChannel, path == null ? null : () -> Files.deleteIfExists(path));
+            IOUtils.close(fileChannel);
         } catch (IOException e) {
             logger.warn("Failed to clean up shared bytes file", e);
         }
@@ -274,14 +275,14 @@ public class SharedBytes extends AbstractRefCounted {
                 bytesRead = remaining;
                 int startPosition = dst.position();
                 dst.put(startPosition, mappedByteBuffer, position, bytesRead).position(startPosition + bytesRead);
-//                logger.info(
-//                    "--> IO.read: from [{}], position={}, bytesRead={} into dst startPosition={}, [{}]",
-//                    this,
-//                    position,
-//                    bytesRead,
-//                    startPosition,
-//                    Thread.currentThread().getName()
-//                );
+                // logger.info(
+                // "--> IO.read: from [{}], position={}, bytesRead={} into dst startPosition={}, [{}]",
+                // this,
+                // position,
+                // bytesRead,
+                // startPosition,
+                // Thread.currentThread().getName()
+                // );
             } else {
                 assert false;
                 bytesRead = fileChannel.read(dst, pageStart + position);
