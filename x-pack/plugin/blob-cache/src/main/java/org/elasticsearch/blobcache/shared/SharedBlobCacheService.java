@@ -835,10 +835,11 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
             final boolean trackerAvailable = region.tracker.checkAvailable(end - regionStart);
             if (shouldLog) {
                 logger.info(
-                    "--> tryRead: offset={}, isLastAccessed={}, cacheFileRegion=[{}], [{}]",
+                    "--> tryRead: offset={}, isLastAccessed={}, cacheFileRegion=[{}], trackerAvailable=[{}], [{}]",
                     offset,
                     fileRegion == lastAccessedRegion,
                     region,
+                    trackerAvailable,
                     Thread.currentThread().getName()
                 );
             }
