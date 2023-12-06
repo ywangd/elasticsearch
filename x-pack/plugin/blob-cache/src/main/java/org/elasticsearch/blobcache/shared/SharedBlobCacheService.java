@@ -752,14 +752,16 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                         var ioRef = io;
                         assert regionOwners.get(ioRef) == CacheFileRegion.this;
                         final int length = Math.toIntExact(gap.end() - start);
-                        // logger.info(
-                        // "--> fillGaps: region key [{}], start={}, length={}, gap=[{}], [{}]",
-                        // CacheFileRegion.this.regionKey,
-                        // start,
-                        // length,
-                        // gap,
-                        // Thread.currentThread().getName()
-                        // );
+                        if (shouldLog) {
+                            logger.info(
+                                "--> fillGaps: cacheFileRegion=[{}], start={}, length={}, gap=[{}], [{}]",
+                                CacheFileRegion.this,
+                                start,
+                                length,
+                                gap,
+                                Thread.currentThread().getName()
+                            );
+                        }
                         writer.fillCacheRange(ioRef, start, start, length, progress -> gap.onProgress(start + progress));
                         writeCount.increment();
 
