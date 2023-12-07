@@ -741,30 +741,37 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
         }
 
         private void fillGaps(Executor executor, RangeMissingHandler writer, List<SparseFileTracker.Gap> gaps) {
+            final var cacheFileRegion = CacheFileRegion.this;
             for (SparseFileTracker.Gap gap : gaps) {
                 executor.execute(new AbstractRunnable() {
 
                     @Override
                     protected void doRun() throws Exception {
-                        assert CacheFileRegion.this.hasReferences();
+                        // assert CacheFileRegion.this.hasReferences();
                         ensureOpen();
-                        final int start = Math.toIntExact(gap.start());
-                        var ioRef = io;
-                        assert regionOwners.get(ioRef) == CacheFileRegion.this;
-                        final int length = Math.toIntExact(gap.end() - start);
-                        if (shouldLog) {
-                            logger.info(
-                                "--> fillGaps: cacheFileRegion=[{}], start={}, length={}, gap=[{}], [{}]",
-                                CacheFileRegion.this,
-                                start,
-                                length,
-                                gap,
-                                Thread.currentThread().getName()
-                            );
+                        if (cacheFileRegion.tryIncRef() == false) {
+                            throw new AlreadyClosedException("File chunk [" + cacheFileRegion.regionKey + "] has been released");
                         }
-                        writer.fillCacheRange(ioRef, start, start, length, progress -> gap.onProgress(start + progress));
-                        writeCount.increment();
-
+                        try {
+                            final int start = Math.toIntExact(gap.start());
+                            var ioRef = io;
+                            assert regionOwners.get(ioRef) == CacheFileRegion.this;
+                            final int length = Math.toIntExact(gap.end() - start);
+                            if (shouldLog) {
+                                logger.info(
+                                    "--> fillGaps: cacheFileRegion=[{}], start={}, length={}, gap=[{}], [{}]",
+                                    CacheFileRegion.this,
+                                    start,
+                                    length,
+                                    gap,
+                                    Thread.currentThread().getName()
+                                );
+                            }
+                            writer.fillCacheRange(ioRef, start, start, length, progress -> gap.onProgress(start + progress));
+                            writeCount.increment();
+                        } finally {
+                            cacheFileRegion.decRef();
+                        }
                         gap.onCompletion();
                     }
 
@@ -962,6 +969,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                 return (channel, channelPos, relativePos, len, progressUpdater) -> {
                     assert assertValidRegionAndLength(fileRegion, channelPos, len);
                     adjustedWriter.fillCacheRange(channel, channelPos, relativePos, len, progressUpdater);
+                    assert regionOwners.get(fileRegion.io) == fileRegion;
                 };
             }
             return adjustedWriter;
@@ -977,7 +985,9 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
             if (Assertions.ENABLED) {
                 return (channel, channelPos, relativePos, len) -> {
                     assert assertValidRegionAndLength(fileRegion, channelPos, len);
-                    return adjustedReader.onRangeAvailable(channel, channelPos, relativePos, len);
+                    final int bytesRead = adjustedReader.onRangeAvailable(channel, channelPos, relativePos, len);
+                    assert regionOwners.get(fileRegion.io) == fileRegion;
+                    return bytesRead;
                 };
             }
             return adjustedReader;
