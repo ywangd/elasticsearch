@@ -3718,10 +3718,8 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                 };
                 final String partName = fileInfo.partName(i);
                 logger.trace("[{}] Writing [{}] to [{}]", metadata.name(), partName, shardContainer.path());
-                final long startMS = threadPool.relativeTimeInMillis();
-                shardContainer.writeBlob(OperationPurpose.SNAPSHOT, partName, inputStream, partBytes, false);
                 logger.info(
-                    "[{}] Writing [{}][{}][{}][{}] of size [{}b] to [{}] took [{}ms]",
+                    "[{}] Writing [{}][{}][{}][{}] of size [{}b] to [{}], [{}]",
                     metadata,
                     file,
                     partName,
@@ -3729,7 +3727,21 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
                     shardId.getIndex().getUUID(),
                     partBytes,
                     shardContainer.path(),
-                    threadPool.relativeTimeInMillis() - startMS
+                    Thread.currentThread().getName()
+                );
+                final long startMS = threadPool.relativeTimeInMillis();
+                shardContainer.writeBlob(OperationPurpose.SNAPSHOT, partName, inputStream, partBytes, false);
+                logger.info(
+                    "[{}] Wrote [{}][{}][{}][{}] of size [{}b] to [{}] took [{}ms], [{}]",
+                    metadata,
+                    file,
+                    partName,
+                    shardId,
+                    shardId.getIndex().getUUID(),
+                    partBytes,
+                    shardContainer.path(),
+                    threadPool.relativeTimeInMillis() - startMS,
+                    Thread.currentThread().getName()
                 );
             }
             Store.verify(indexInput);
