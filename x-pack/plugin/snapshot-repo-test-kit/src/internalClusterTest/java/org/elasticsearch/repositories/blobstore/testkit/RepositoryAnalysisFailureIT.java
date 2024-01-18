@@ -164,7 +164,13 @@ public class RepositoryAnalysisFailureIT extends AbstractSnapshotIntegTestCase {
                 if (actualContents != null && countDown.countDown()) {
                     // CRC32 should always detect a single bit flip
                     disruptedContents[Math.toIntExact(position + randomLongBetween(0, length - 1))] ^= (byte) (1 << between(0, 7));
-                    logger.info("--> disrupted contents: [{}], actual contents [{}]", disruptedContents, actualContents);
+                    logger.info(
+                        "--> disrupted contents: [{}], actual contents [{}], position [{}], length [{}]",
+                        disruptedContents,
+                        actualContents,
+                        position,
+                        length
+                    );
                 }
                 return disruptedContents;
             }
