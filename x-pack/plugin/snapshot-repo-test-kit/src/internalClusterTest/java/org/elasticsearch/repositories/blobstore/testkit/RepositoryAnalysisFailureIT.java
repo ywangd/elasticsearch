@@ -155,7 +155,8 @@ public class RepositoryAnalysisFailureIT extends AbstractSnapshotIntegTestCase {
         request.maxBlobSize(ByteSizeValue.ofBytes(10L));
         request.abortWritePermitted(false);
 
-        final CountDown countDown = new CountDown(between(1, request.getBlobCount()));
+        final int n = between(1, request.getBlobCount());
+        final CountDown countDown = new CountDown(n);
 
         blobStore.setDisruption(new Disruption() {
             @Override
@@ -165,8 +166,10 @@ public class RepositoryAnalysisFailureIT extends AbstractSnapshotIntegTestCase {
                     // CRC32 should always detect a single bit flip
                     disruptedContents[Math.toIntExact(position + randomLongBetween(0, length - 1))] ^= (byte) (1 << between(0, 7));
                     logger.info(
-                        "--> [{}], [{}], disrupted contents: [{}], actual contents [{}], position [{}], length [{}]",
-                        purpose, blobName,
+                        "--> [{}], [{}], [{}], disrupted contents: [{}], actual contents [{}], position [{}], length [{}]",
+                        purpose,
+                        blobName,
+                        n,
                         disruptedContents,
                         actualContents,
                         position,
@@ -527,7 +530,8 @@ public class RepositoryAnalysisFailureIT extends AbstractSnapshotIntegTestCase {
             return actualContents;
         }
 
-        default byte[] onRead(OperationPurpose purpose, String blobName, byte[] actualContents, long position, long length) throws IOException {
+        default byte[] onRead(OperationPurpose purpose, String blobName, byte[] actualContents, long position, long length)
+            throws IOException {
             return actualContents;
         }
 
@@ -585,7 +589,13 @@ public class RepositoryAnalysisFailureIT extends AbstractSnapshotIntegTestCase {
         public InputStream readBlob(OperationPurpose purpose, String blobName) throws IOException {
             assertPurpose(purpose);
             final byte[] actualContents = blobs.get(blobName);
-            final byte[] disruptedContents = disruption.onRead(purpose, blobName, actualContents, 0L, actualContents == null ? 0L : actualContents.length);
+            final byte[] disruptedContents = disruption.onRead(
+                purpose,
+                blobName,
+                actualContents,
+                0L,
+                actualContents == null ? 0L : actualContents.length
+            );
             if (disruptedContents == null) {
                 throw new FileNotFoundException(blobName + " not found");
             }
