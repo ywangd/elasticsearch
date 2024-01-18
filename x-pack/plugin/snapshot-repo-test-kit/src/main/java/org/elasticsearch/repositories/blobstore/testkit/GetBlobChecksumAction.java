@@ -35,6 +35,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.NoSuchFileException;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.CRC32;
@@ -173,6 +174,7 @@ class GetBlobChecksumAction extends HandledTransportAction<GetBlobChecksumAction
             throttleNanos.get()
         );
         logger.trace("responding to [{}] with [{}]", request, response);
+        logger.info("--> responding to [{}] with [{}]", request, response);
         listener.onResponse(response);
     }
 

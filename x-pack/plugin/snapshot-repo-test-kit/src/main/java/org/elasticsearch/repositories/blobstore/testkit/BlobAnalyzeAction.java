@@ -364,6 +364,11 @@ class BlobAnalyzeAction extends HandledTransportAction<BlobAnalyzeAction.Request
                 if (logger.isTraceEnabled()) {
                     logger.trace("finished writing blob for [{}], got checksum [{}]", request.getDescription(), checksum);
                 }
+                logger.info(
+                    "--> finished writing blob for [{}], got checksum [{}]",
+                    request.getDescription(),
+                    checksum
+                );
                 return new WriteDetails(request.targetLength, elapsedNanos, throttledNanos.get(), checksum);
             });
         }
@@ -511,6 +516,16 @@ class BlobAnalyzeAction extends HandledTransportAction<BlobAnalyzeAction.Request
                 final GetBlobChecksumAction.Response response = nodeResponse.response;
                 final RepositoryVerificationException nodeFailure;
                 if (response.isNotFound()) {
+                    logger.info(
+                        "--> notFound: checksumStart [{}], checksumEnd [{}], checksumLength [{}], "
+                            + "write1Details [{}], write2Details [{}], expectedChecksumDescription [{}]",
+                        checksumStart,
+                        checksumEnd,
+                        checksumLength,
+                        write1Details,
+                        write2Details,
+                        expectedChecksumDescription
+                    );
                     if (request.readEarly || request.getAbortWrite()) {
                         nodeFailure = null; // "not found" is legitimate iff we tried to read it before the write completed
                     } else {
@@ -520,6 +535,17 @@ class BlobAnalyzeAction extends HandledTransportAction<BlobAnalyzeAction.Request
                         );
                     }
                 } else {
+                    logger.info(
+                        "--> FOUND: checksumStart [{}], checksumEnd [{}], checksumLength [{}], "
+                            + "readChecksum [{}], write1Details [{}], write2Details [{}], expectedChecksumDescription [{}]",
+                        checksumStart,
+                        checksumEnd,
+                        checksumLength,
+                        response.getChecksum(),
+                        write1Details,
+                        write2Details,
+                        expectedChecksumDescription
+                    );
                     anyFound = true;
                     final long actualChecksum = response.getChecksum();
                     if (response.getBytesRead() == checksumLength && checksumPredicate.test(actualChecksum)) {
@@ -635,6 +661,20 @@ class BlobAnalyzeAction extends HandledTransportAction<BlobAnalyzeAction.Request
             this.elapsedNanos = elapsedNanos;
             this.throttledNanos = throttledNanos;
             this.checksum = checksum;
+        }
+
+        @Override
+        public String toString() {
+            return "WriteDetails{"
+                + "bytesWritten="
+                + bytesWritten
+                + ", elapsedNanos="
+                + elapsedNanos
+                + ", throttledNanos="
+                + throttledNanos
+                + ", checksum="
+                + checksum
+                + '}';
         }
     }
 
