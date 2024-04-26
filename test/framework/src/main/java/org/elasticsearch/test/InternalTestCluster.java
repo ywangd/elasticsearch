@@ -1361,9 +1361,9 @@ public final class InternalTestCluster extends TestCluster {
                     for (IndexShard indexShard : indexService) {
                         try {
                             Engine engine = IndexShardTestCase.getEngine(indexShard);
-                            // TODO: flush so that no reference is held by VBCC
-                            engine.flush(false, true);
                             if (engine instanceof InternalEngine) {
+                                // TODO: flush so that no reference is held by VBCC
+                                engine.flush(false, true);
                                 assertFalse(
                                     indexShard.routingEntry().toString() + " has unreleased snapshotted index commits",
                                     EngineTestCase.hasSnapshottedCommits(engine)
