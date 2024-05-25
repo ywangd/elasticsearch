@@ -12,6 +12,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.ConcurrentMergeScheduler;
 import org.apache.lucene.index.MergePolicy;
 import org.apache.lucene.index.MergeScheduler;
+import org.apache.lucene.index.SegmentCommitInfo;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.metrics.CounterMetric;
 import org.elasticsearch.common.metrics.MeanMetric;
@@ -105,12 +106,13 @@ class ElasticsearchConcurrentMergeScheduler extends ConcurrentMergeScheduler {
 
         if (logger.isTraceEnabled()) {
             logger.trace(
-                "merge [{}] starting..., merging [{}] segments, [{}] docs, [{}] size, into [{}] estimated_size",
+                "merge [{}] starting..., merging [{}] segments, [{}] docs, [{}] size, into [{}] estimated_size, segments {}",
                 getSegmentName(merge),
                 merge.segments.size(),
                 totalNumDocs,
                 ByteSizeValue.ofBytes(totalSizeInBytes),
-                ByteSizeValue.ofBytes(merge.estimatedMergeBytes)
+                ByteSizeValue.ofBytes(merge.estimatedMergeBytes),
+                merge.segments.stream().map(segmentCommitInfo -> segmentCommitInfo.info.name).toList()
             );
         }
         try {
