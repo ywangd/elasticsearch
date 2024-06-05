@@ -1412,6 +1412,7 @@ public class TransportService extends AbstractLifecycleComponent
                 if (holder != null) {
                     assert holder.action().equals(action);
                     assert holder.connection().getNode().equals(node);
+                    logger.info("--> action [{}] with request_id [{}] to node [{}] timed out", action, requestId, node.getName());
                     holder.handler()
                         .handleException(
                             new ReceiveTimeoutTransportException(

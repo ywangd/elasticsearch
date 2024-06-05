@@ -8,6 +8,8 @@
 
 package org.elasticsearch.action.support.replication;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionListenerResponseHandler;
@@ -105,6 +107,8 @@ public class PostWriteRefresh {
         }
     }
 
+    private static final Logger logger = LogManager.getLogger(PostWriteRefresh.class);
+
     private void refreshUnpromotables(
         IndexShard indexShard,
         Translog.Location location,
@@ -118,6 +122,7 @@ public class PostWriteRefresh {
             return;
         }
 
+        logger.info("--> refreshUnpromotables [{}], [{}], [{}] [{}]", location, forced, postWriteRefreshTimeout, Thread.currentThread());
         engineOrNull.addFlushListener(location, listener.delegateFailureAndWrap((l, generation) -> {
             try (
                 ThreadContext.StoredContext ignore = transportService.getThreadPool()
@@ -136,6 +141,7 @@ public class PostWriteRefresh {
         ActionListener<Boolean> listener,
         @Nullable TimeValue postWriteRefreshTimeout
     ) {
+        logger.info("--> sendUnpromotableRequests [{}][{}] [{}]", indexShard.getOperationPrimaryTerm(), generation, Thread.currentThread());
         UnpromotableShardRefreshRequest unpromotableReplicaRequest = new UnpromotableShardRefreshRequest(
             indexShard.getReplicationGroup().getRoutingTable(),
             indexShard.getOperationPrimaryTerm(),
@@ -147,7 +153,10 @@ public class PostWriteRefresh {
             TransportUnpromotableShardRefreshAction.NAME,
             unpromotableReplicaRequest,
             TransportRequestOptions.timeout(postWriteRefreshTimeout),
-            new ActionListenerResponseHandler<>(listener.safeMap(r -> wasForced), in -> ActionResponse.Empty.INSTANCE, refreshExecutor)
+            new ActionListenerResponseHandler<>(listener.safeMap(r -> {
+                logger.info("--> response received for unpromotableReplicaRequest [{}]", generation);
+                return wasForced;
+            }), in -> ActionResponse.Empty.INSTANCE, refreshExecutor)
         );
     }
 

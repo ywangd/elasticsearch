@@ -2187,6 +2187,7 @@ public class InternalEngine extends Engine {
             // if we can't get the lock right away we block if needed otherwise barf
             if (waitIfOngoing == false) {
                 logger.trace("detected an in-flight flush, not blocking to wait for it's completion");
+                logger.info("--> no_flush [{}]", Thread.currentThread());
                 listener.onResponse(FlushResult.NO_FLUSH);
                 return;
             }
@@ -3350,6 +3351,7 @@ public class InternalEngine extends Engine {
         this.flushListener.addOrNotify(location, new ActionListener<>() {
             @Override
             public void onResponse(Long generation) {
+                logger.info("--> notify flushListener [{}] [{}]", generation, Thread.currentThread());
                 waitForCommitDurability(generation, listener.map(v -> generation));
             }
 
