@@ -132,6 +132,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
         requireNonNull(listener, "listener cannot be null");
         requireNonNull(location, "location cannot be null");
 
+        logger.info("--> RefreshListeners.addOrNotify [{}] [{}]", location, Thread.currentThread());
         if (lastRefreshedLocation != null && lastRefreshedLocation.compareTo(location) >= 0) {
             // Location already visible, just call the listener
             listener.accept(false);
@@ -157,6 +158,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
                 // We have a free slot so register the listener
                 listeners.add(new Tuple<>(location, contextPreservingListener));
                 locationRefreshListeners = listeners;
+                logger.info("--> registered refresh listener [{}] [{}]", location, Thread.currentThread());
                 return false;
             }
         }
@@ -343,6 +345,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
                     if (locationListenersToFire == null) {
                         locationListenersToFire = new ArrayList<>();
                     }
+                    logger.info("--> add location listener to fire [{}] [{}]", location, Thread.currentThread());
                     locationListenersToFire.add(tuple);
                 } else {
                     if (preservedLocationListeners == null) {

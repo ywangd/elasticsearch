@@ -100,6 +100,7 @@ public class PostWriteRefresh {
     }
 
     private static void waitUntil(IndexShard indexShard, Translog.Location location, ActionListener<Boolean> listener) {
+        logger.info("--> waitUntil [{}] [{}]", location, Thread.currentThread());
         if (location != null) {
             indexShard.addRefreshListener(location, listener::onResponse);
         } else {

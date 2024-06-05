@@ -4110,6 +4110,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                 }
             }, EsExecutors.DIRECT_EXECUTOR_SERVICE, threadPool.getThreadContext());
         } else {
+            logger.info("--> ignore refresh [{}]", Thread.currentThread());
             // we're not yet ready for reads, just ignore refresh cycles
             listener.accept(false);
         }
