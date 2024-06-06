@@ -345,7 +345,12 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
                     if (locationListenersToFire == null) {
                         locationListenersToFire = new ArrayList<>();
                     }
-                    logger.info("--> add location listener to fire [{}] [{}]", location, Thread.currentThread());
+                    logger.info(
+                        "--> add location listener to fire, waiting for [{}] <= [{}] [{}]",
+                        location,
+                        currentRefreshLocation,
+                        Thread.currentThread()
+                    );
                     locationListenersToFire.add(tuple);
                 } else {
                     if (preservedLocationListeners == null) {
