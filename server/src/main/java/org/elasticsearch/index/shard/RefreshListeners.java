@@ -96,6 +96,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
      * Force-refreshes newly added listeners and forces a refresh if there are currently listeners registered. See {@link #refreshForcers}.
      */
     public Releasable forceRefreshes() {
+        logger.info("--> forceRefreshes [{}]", Thread.currentThread());
         synchronized (this) {
             assert refreshForcers >= 0;
             refreshForcers += 1;
@@ -163,6 +164,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
             }
         }
         // No free slot so force a refresh and call the listener in this thread
+        logger.info("--> force a refresh for [{}] [{}]", location, Thread.currentThread());
         forceRefresh.run();
         listener.accept(true);
         return true;

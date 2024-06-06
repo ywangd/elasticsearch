@@ -776,6 +776,11 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         final ActionListener<Void> listener
     ) throws IllegalIndexShardStateException, IllegalStateException {
         assert shardRouting.primary() : "only primaries can be marked as relocated: " + shardRouting;
+        // try {
+        // Thread.sleep(50);
+        // } catch (InterruptedException e) {
+        // throw new RuntimeException(e);
+        // }
         try (Releasable forceRefreshes = refreshListeners.forceRefreshes()) {
             indexShardOperationPermits.blockOperations(new ActionListener<>() {
                 @Override
@@ -3959,11 +3964,13 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                     return;
                 } else {
                     logger.trace("scheduledRefresh: refresh with source [schedule]");
+                    logger.info("--> scheduledRefresh: refresh with source [schedule] [{}]", listenerNeedsRefresh);
                     engine.maybeRefresh("schedule", l.map(Engine.RefreshResult::refreshed));
                     return;
                 }
             }
             logger.trace("scheduledRefresh: no refresh needed");
+            logger.info("--> scheduledRefresh: no refresh needed [{}]", listenerNeedsRefresh);
             engine.maybePruneDeletes(); // try to prune the deletes in the engine if we accumulated some
             l.onResponse(false);
         });

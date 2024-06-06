@@ -100,6 +100,11 @@ public class PostWriteRefresh {
     }
 
     private static void waitUntil(IndexShard indexShard, Translog.Location location, ActionListener<Boolean> listener) {
+        // try {
+        // Thread.sleep(100);
+        // } catch (InterruptedException e) {
+        // throw new RuntimeException(e);
+        // }
         logger.info("--> waitUntil [{}] [{}]", location, Thread.currentThread());
         if (location != null) {
             indexShard.addRefreshListener(location, listener::onResponse);
@@ -142,7 +147,13 @@ public class PostWriteRefresh {
         ActionListener<Boolean> listener,
         @Nullable TimeValue postWriteRefreshTimeout
     ) {
-        logger.info("--> sendUnpromotableRequests [{}][{}] [{}]", indexShard.getOperationPrimaryTerm(), generation, Thread.currentThread());
+        logger.info(
+            "--> sendUnpromotableRequests [{}][{}][{}] [{}]",
+            indexShard.getOperationPrimaryTerm(),
+            generation,
+            wasForced,
+            Thread.currentThread()
+        );
         UnpromotableShardRefreshRequest unpromotableReplicaRequest = new UnpromotableShardRefreshRequest(
             indexShard.getReplicationGroup().getRoutingTable(),
             indexShard.getOperationPrimaryTerm(),
@@ -155,7 +166,12 @@ public class PostWriteRefresh {
             unpromotableReplicaRequest,
             TransportRequestOptions.timeout(postWriteRefreshTimeout),
             new ActionListenerResponseHandler<>(listener.safeMap(r -> {
-                logger.info("--> response received for unpromotableReplicaRequest [{}]", generation);
+                logger.info(
+                    "--> response received for unpromotableReplicaRequest [{}][{}] [{}]",
+                    generation,
+                    wasForced,
+                    Thread.currentThread()
+                );
                 return wasForced;
             }), in -> ActionResponse.Empty.INSTANCE, refreshExecutor)
         );
