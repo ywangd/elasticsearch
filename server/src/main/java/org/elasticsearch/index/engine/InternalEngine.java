@@ -2223,6 +2223,10 @@ public class InternalEngine extends Engine {
                     // we need to refresh in order to clear older version values
                     refresh("version_table_flush", SearcherScope.INTERNAL, true);
                     translog.trimUnreferencedReaders();
+                    final Translog.Location writeLocationAfterFlush = getTranslogLastWriteLocation();
+                    if (writeLocationAfterFlush.equals(commitLocation) == false && hasUncommittedChanges() == false) {
+                        commitLocation = writeLocationAfterFlush;
+                    }
                     // Use the timestamp from when the flush started, but only update it in case of success, so that any exception in
                     // the above lines would not lead the engine to think that it recently flushed, when it did not.
                     this.lastFlushTimestamp = lastFlushTimestamp;
