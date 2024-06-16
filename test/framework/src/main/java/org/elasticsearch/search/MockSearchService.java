@@ -11,6 +11,7 @@ package org.elasticsearch.search;
 import org.elasticsearch.action.search.SearchShardTask;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.util.BigArrays;
+import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.indices.ExecutorSelector;
 import org.elasticsearch.indices.IndicesService;
@@ -53,13 +54,30 @@ public class MockSearchService extends SearchService {
     public static void assertNoInFlightContext() {
         final Map<ReaderContext, Throwable> copy = new HashMap<>(ACTIVE_SEARCH_CONTEXTS);
         if (copy.isEmpty() == false) {
+            final Map.Entry<ReaderContext, Throwable> entry = copy.entrySet().iterator().next();
             throw new AssertionError(
                 "There are still ["
                     + copy.size()
-                    + "] in-flight contexts. The first one's creation site is listed as the cause of this exception.",
-                copy.values().iterator().next()
+                    + "] in-flight contexts. "
+                    + "readerContext = ["
+                    + readerContextToString(entry.getKey())
+                    + "]. "
+                    + "The first one's creation site is listed as the cause of this exception.",
+                entry.getValue()
             );
         }
+    }
+
+    private static String readerContextToString(ReaderContext readerContext) {
+        return Strings.format(
+            "%s [%s] [%s] [%s] [%s] [%s]",
+            readerContext.indexShard().shardId(),
+            readerContext.indexShard().routingEntry(),
+            readerContext.getStartTimeInNano(),
+            readerContext.isExpired(),
+            readerContext.getClass(),
+            readerContext.scrollContext()
+        );
     }
 
     /**

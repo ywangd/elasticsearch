@@ -1018,6 +1018,12 @@ public final class NodeEnvironment implements Closeable {
                         lockDetails.v2(),
                         TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lockDetails.v1())
                     );
+                    HotThreads.logLocalHotThreads(
+                        logger,
+                        Level.INFO,
+                        "hot threads for obtaining shard lock for " + shardId,
+                        ReferenceDocs.LOGGING
+                    );
                     maybeLogThreadDump(shardId, message);
                     throw new ShardLockObtainFailedException(shardId, message);
                 }

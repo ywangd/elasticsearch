@@ -417,7 +417,7 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
         if (isClosed.compareAndSet(false, true)) {
             // only do this once!
             decRef();
-            logger.debug("store reference count on close: {}", refCounter.refCount());
+            logger.info("--> store reference count on close: {}", refCounter.refCount());
         }
     }
 
@@ -431,6 +431,7 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
     }
 
     private void closeInternal() {
+        logger.info("--> closeInternal [{}]", shardId);
         // Leverage try-with-resources to close the shard lock for us
         try (Closeable c = shardLock) {
             try {
