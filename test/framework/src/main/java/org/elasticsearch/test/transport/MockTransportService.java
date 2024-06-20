@@ -452,13 +452,24 @@ public class MockTransportService extends TransportService {
                 TransportRequest request,
                 TransportRequestOptions options
             ) throws IOException {
+                final boolean isHandOff =
+                    action.equals("internal:index/shard/recovery/stateless_primary_relocation/primary_context_handoff");
                 if (connection.isClosed()) {
+                    if (isHandOff) {
+                        logger.info("--> connection already closed for handoff");
+                    }
                     throw new NodeNotConnectedException(connection.getNode(), "connection already closed");
                 } else if (refs.tryIncRef()) {
+                    if (isHandOff) {
+                        logger.info("--> does not send anything for handoff");
+                    }
                     // don't send anything, the receiving node is unresponsive
                     toClose.add(connection);
                     refs.decRef();
                 } else {
+                    if (isHandOff) {
+                        logger.info("--> actually send handoff");
+                    }
                     connection.sendRequest(requestId, action, request, options);
                 }
             }

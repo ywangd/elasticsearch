@@ -320,6 +320,7 @@ public class PeerRecoveryTargetService implements IndexEventListener {
             assert preExistingRequest == null;
             assert indexShard.indexSettings().getIndexMetadata().isSearchableSnapshot() == false;
             try (onCompletion) {
+                logger.info("--> {} sending recovery to source node [{}]", indexShard.shardId(), recoveryTarget.sourceNode().getName());
                 client.execute(
                     StatelessPrimaryRelocationAction.TYPE,
                     new StatelessPrimaryRelocationAction.Request(
