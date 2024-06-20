@@ -8,6 +8,7 @@
 
 package org.elasticsearch.index;
 
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
@@ -25,7 +26,6 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
-import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
@@ -1189,7 +1189,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
 
     static final class AsyncRefreshTask extends BaseAsyncTask {
 
-        private static final Logger logger = Loggers.getLogger(AsyncRefreshTask.class);
+        private static final Logger logger = LogManager.getLogger(AsyncRefreshTask.class);
 
         AsyncRefreshTask(IndexService indexService) {
             super(
