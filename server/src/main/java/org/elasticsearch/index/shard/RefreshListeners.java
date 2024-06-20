@@ -96,6 +96,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
      * Force-refreshes newly added listeners and forces a refresh if there are currently listeners registered. See {@link #refreshForcers}.
      */
     public Releasable forceRefreshes() {
+        logger.info("--> forceRefreshes");
         synchronized (this) {
             assert refreshForcers >= 0;
             refreshForcers += 1;
@@ -132,6 +133,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
         requireNonNull(listener, "listener cannot be null");
         requireNonNull(location, "location cannot be null");
 
+        logger.info("--> RefreshListeners.addOrNotify [{}]", location);
         if (lastRefreshedLocation != null && lastRefreshedLocation.compareTo(location) >= 0) {
             // Location already visible, just call the listener
             listener.accept(false);
@@ -157,10 +159,12 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
                 // We have a free slot so register the listener
                 listeners.add(new Tuple<>(location, contextPreservingListener));
                 locationRefreshListeners = listeners;
+                logger.info("--> registered refresh listener [{}]", location);
                 return false;
             }
         }
         // No free slot so force a refresh and call the listener in this thread
+        logger.info("--> force a refresh for [{}]", location);
         forceRefresh.run();
         listener.accept(true);
         return true;
@@ -343,6 +347,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
                     if (locationListenersToFire == null) {
                         locationListenersToFire = new ArrayList<>();
                     }
+                    logger.info("--> add location listener to fire, waiting for [{}] <= [{}]", location, currentRefreshLocation);
                     locationListenersToFire.add(tuple);
                 } else {
                     if (preservedLocationListeners == null) {

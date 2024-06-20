@@ -3955,11 +3955,13 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                     return;
                 } else {
                     logger.trace("scheduledRefresh: refresh with source [schedule]");
+                    logger.info("--> {} scheduledRefresh with source [schedule] [{}]", shardId, listenerNeedsRefresh);
                     engine.maybeRefresh("schedule", l.map(Engine.RefreshResult::refreshed));
                     return;
                 }
             }
             logger.trace("scheduledRefresh: no refresh needed");
+            logger.info("--> {} scheduledRefresh: no refresh needed [{}]", shardId, listenerNeedsRefresh);
             engine.maybePruneDeletes(); // try to prune the deletes in the engine if we accumulated some
             l.onResponse(false);
         });
@@ -4106,6 +4108,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                 }
             }, EsExecutors.DIRECT_EXECUTOR_SERVICE, threadPool.getThreadContext());
         } else {
+            logger.info("--> {} ignore refresh", shardId);
             // we're not yet ready for reads, just ignore refresh cycles
             listener.accept(false);
         }

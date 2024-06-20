@@ -8,6 +8,7 @@
 
 package org.elasticsearch.index;
 
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.IndexSearcher;
@@ -24,6 +25,7 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
@@ -614,6 +616,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
         Executor closeExecutor,
         ActionListener<Void> closeListener
     ) {
+        logger.info("--> {} closeShard", indexShard.shardId());
         final int shardId = sId.id();
         final Settings indexSettings = this.getIndexSettings().getSettings();
         if (store != null) {
@@ -1186,6 +1189,8 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
 
     static final class AsyncRefreshTask extends BaseAsyncTask {
 
+        private static final Logger logger = Loggers.getLogger(AsyncRefreshTask.class);
+
         AsyncRefreshTask(IndexService indexService) {
             super(
                 indexService,
@@ -1196,6 +1201,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
 
         @Override
         protected void runInternal() {
+            logger.info("--> [{}] run scheduled refresh ", indexService.index().getName());
             indexService.maybeRefreshEngine(false);
         }
 

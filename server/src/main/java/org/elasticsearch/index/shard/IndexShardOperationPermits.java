@@ -14,6 +14,7 @@ import org.elasticsearch.ElasticsearchTimeoutException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.support.ContextPreservingActionListener;
+import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 import org.elasticsearch.common.util.concurrent.ThreadContext.StoredContext;
 import org.elasticsearch.core.Assertions;
@@ -143,9 +144,12 @@ final class IndexShardOperationPermits implements Closeable {
             }
         }
         if (semaphore.tryAcquire(TOTAL_PERMITS, timeout, timeUnit)) {
+            final String acquireId = UUIDs.randomBase64UUID();
+            logger.info("--> [{}] acquiredAll [{}]", shardId, acquireId);
             return Releasables.releaseOnce(() -> {
                 assert semaphore.availablePermits() == 0;
                 semaphore.release(TOTAL_PERMITS);
+                logger.info("--> [{}] released all [{}]", shardId, acquireId);
             });
         } else {
             throw new ElasticsearchTimeoutException("timeout while blocking operations after [" + new TimeValue(timeout, timeUnit) + "]");
@@ -257,7 +261,12 @@ final class IndexShardOperationPermits implements Closeable {
     private Releasable acquire() throws InterruptedException {
         assert Thread.holdsLock(this);
         if (semaphore.tryAcquire(1, 0, TimeUnit.SECONDS)) { // the un-timed tryAcquire methods do not honor the fairness setting
-            return Releasables.releaseOnce(semaphore::release);
+            final String acquireId = UUIDs.randomBase64UUID();
+            logger.info("--> [{}] acquired [{}]", shardId, acquireId);
+            return Releasables.releaseOnce(() -> {
+                semaphore.release();
+                logger.info("--> [{}] released [{}]", shardId, acquireId);
+            });
         } else {
             // this should never happen, if it does something is deeply wrong
             throw new IllegalStateException("failed to obtain permit but operations are not delayed");
