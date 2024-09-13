@@ -64,6 +64,7 @@ import org.elasticsearch.indices.recovery.PeerRecoverySourceService;
 import org.elasticsearch.indices.store.IndicesStore;
 import org.elasticsearch.injection.guice.Injector;
 import org.elasticsearch.monitor.fs.FsHealthService;
+import org.elasticsearch.monitor.jvm.HotThreads;
 import org.elasticsearch.monitor.jvm.JvmInfo;
 import org.elasticsearch.monitor.metrics.NodeMetrics;
 import org.elasticsearch.node.internal.TerminationHandler;
@@ -92,6 +93,7 @@ import java.io.BufferedWriter;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
@@ -111,7 +113,6 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-
 import javax.net.ssl.SNIHostName;
 
 import static org.elasticsearch.core.Strings.format;
@@ -723,6 +724,13 @@ public class Node implements Closeable {
                     "Some shards are still open after the threadpool terminated. "
                         + "Something is leaking index readers or store references."
                 );
+            }
+        } else {
+            try (var writer = new StringWriter()) {
+                new HotThreads().busiestThreads(9999).ignoreIdleThreads(false).detect(writer);
+                logger.info("--> hot threads failing close node:\n{}\n", writer.toString());
+            } catch (Exception e) {
+                logger.info("--> fail to log hot threads failing close node [{}]", e.getMessage());
             }
         }
         return terminated;
