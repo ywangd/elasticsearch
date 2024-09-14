@@ -11,6 +11,7 @@ package org.elasticsearch.index.shard;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchTimeoutException;
+import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.support.ContextPreservingActionListener;
@@ -149,13 +150,16 @@ final class IndexShardOperationPermits implements Closeable {
         }
         if (semaphore.tryAcquire(TOTAL_PERMITS, timeout, timeUnit)) {
             final Long acquireId = -permitsSeqNo.getAndIncrement();
-            permitsTracking.put(acquireId, threadPool.absoluteTimeInMillis() + ", " + Thread.currentThread());
-            // logger.info("--> [{}] acquiredAll [{}]", shardId, acquireId);
+            // permitsTracking.put(
+            // acquireId,
+            // Thread.currentThread() + "\n" + ExceptionsHelper.formatStackTrace(Thread.currentThread().getStackTrace())
+            // );
+            logger.info("--> [{}] acquiredAll [{}]", shardId, acquireId);
             return Releasables.releaseOnce(() -> {
                 assert semaphore.availablePermits() == 0;
                 semaphore.release(TOTAL_PERMITS);
-                permitsTracking.remove(acquireId);
-                // logger.info("--> [{}] released all [{}]", shardId, acquireId);
+                // permitsTracking.remove(acquireId);
+                logger.info("--> [{}] released all [{}]", shardId, acquireId);
             });
         } else {
             throw new ElasticsearchTimeoutException("timeout while blocking operations after [" + new TimeValue(timeout, timeUnit) + "]");
@@ -268,12 +272,15 @@ final class IndexShardOperationPermits implements Closeable {
         assert Thread.holdsLock(this);
         if (semaphore.tryAcquire(1, 0, TimeUnit.SECONDS)) { // the un-timed tryAcquire methods do not honor the fairness setting
             final Long acquireId = permitsSeqNo.getAndIncrement();
-            permitsTracking.put(acquireId, threadPool.absoluteTimeInMillis() + ", " + Thread.currentThread());
-            // logger.info("--> [{}] acquired [{}]", shardId, acquireId);
+            // permitsTracking.put(
+            // acquireId,
+            // Thread.currentThread() + "\n" + ExceptionsHelper.formatStackTrace(Thread.currentThread().getStackTrace())
+            // );
+            logger.info("--> [{}] acquired [{}]", shardId, acquireId);
             return Releasables.releaseOnce(() -> {
                 semaphore.release();
-                permitsTracking.remove(acquireId);
-                // logger.info("--> [{}] released [{}]", shardId, acquireId);
+                // permitsTracking.remove(acquireId);
+                logger.info("--> [{}] released [{}]", shardId, acquireId);
             });
         } else {
             // this should never happen, if it does something is deeply wrong
