@@ -14,7 +14,6 @@ import org.elasticsearch.ElasticsearchTimeoutException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.support.ContextPreservingActionListener;
-import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.common.util.concurrent.ThreadContext.StoredContext;
@@ -34,6 +33,7 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 /**
@@ -54,7 +54,8 @@ final class IndexShardOperationPermits implements Closeable {
     private final List<ActionListener<Releasable>> delayedOperations = new ArrayList<>(); // operations that are delayed
     private volatile boolean closed;
     private int queuedBlockOperations; // does not need to be volatile as all accesses are done under a lock on this
-    final Map<String, String> permitsTracking = ConcurrentCollections.newConcurrentMap();
+    private final AtomicLong permitsSeqNo = new AtomicLong(1L);
+    final Map<Long, String> permitsTracking = ConcurrentCollections.newConcurrentMap();
 
     /**
      * Construct operation permits for the specified shards.
@@ -147,7 +148,7 @@ final class IndexShardOperationPermits implements Closeable {
             }
         }
         if (semaphore.tryAcquire(TOTAL_PERMITS, timeout, timeUnit)) {
-            final String acquireId = "A/" + UUIDs.randomBase64UUID();
+            final Long acquireId = -permitsSeqNo.getAndIncrement();
             permitsTracking.put(acquireId, threadPool.absoluteTimeInMillis() + ", " + Thread.currentThread());
             // logger.info("--> [{}] acquiredAll [{}]", shardId, acquireId);
             return Releasables.releaseOnce(() -> {
@@ -266,7 +267,7 @@ final class IndexShardOperationPermits implements Closeable {
     private Releasable acquire() throws InterruptedException {
         assert Thread.holdsLock(this);
         if (semaphore.tryAcquire(1, 0, TimeUnit.SECONDS)) { // the un-timed tryAcquire methods do not honor the fairness setting
-            final String acquireId = UUIDs.randomBase64UUID();
+            final Long acquireId = permitsSeqNo.getAndIncrement();
             permitsTracking.put(acquireId, threadPool.absoluteTimeInMillis() + ", " + Thread.currentThread());
             // logger.info("--> [{}] acquired [{}]", shardId, acquireId);
             return Releasables.releaseOnce(() -> {
