@@ -4404,4 +4404,8 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         );
     }
 
+    public void logPermitsTracking() {
+        logger.info("--> permitsTracking: {}", indexShardOperationPermits.permitsTracking);
+    }
+
 }

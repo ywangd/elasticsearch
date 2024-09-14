@@ -16,6 +16,7 @@ import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.support.ContextPreservingActionListener;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
+import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.common.util.concurrent.ThreadContext.StoredContext;
 import org.elasticsearch.core.Assertions;
 import org.elasticsearch.core.IOUtils;
@@ -29,6 +30,7 @@ import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -52,6 +54,7 @@ final class IndexShardOperationPermits implements Closeable {
     private final List<ActionListener<Releasable>> delayedOperations = new ArrayList<>(); // operations that are delayed
     private volatile boolean closed;
     private int queuedBlockOperations; // does not need to be volatile as all accesses are done under a lock on this
+    final Map<String, String> permitsTracking = ConcurrentCollections.newConcurrentMap();
 
     /**
      * Construct operation permits for the specified shards.
@@ -144,12 +147,14 @@ final class IndexShardOperationPermits implements Closeable {
             }
         }
         if (semaphore.tryAcquire(TOTAL_PERMITS, timeout, timeUnit)) {
-            final String acquireId = UUIDs.randomBase64UUID();
-            logger.info("--> [{}] acquiredAll [{}]", shardId, acquireId);
+            final String acquireId = "A/" + UUIDs.randomBase64UUID();
+            permitsTracking.put(acquireId, threadPool.absoluteTimeInMillis() + ", " + Thread.currentThread());
+            // logger.info("--> [{}] acquiredAll [{}]", shardId, acquireId);
             return Releasables.releaseOnce(() -> {
                 assert semaphore.availablePermits() == 0;
                 semaphore.release(TOTAL_PERMITS);
-                logger.info("--> [{}] released all [{}]", shardId, acquireId);
+                permitsTracking.remove(acquireId);
+                // logger.info("--> [{}] released all [{}]", shardId, acquireId);
             });
         } else {
             throw new ElasticsearchTimeoutException("timeout while blocking operations after [" + new TimeValue(timeout, timeUnit) + "]");
@@ -262,10 +267,12 @@ final class IndexShardOperationPermits implements Closeable {
         assert Thread.holdsLock(this);
         if (semaphore.tryAcquire(1, 0, TimeUnit.SECONDS)) { // the un-timed tryAcquire methods do not honor the fairness setting
             final String acquireId = UUIDs.randomBase64UUID();
-            logger.info("--> [{}] acquired [{}]", shardId, acquireId);
+            permitsTracking.put(acquireId, threadPool.absoluteTimeInMillis() + ", " + Thread.currentThread());
+            // logger.info("--> [{}] acquired [{}]", shardId, acquireId);
             return Releasables.releaseOnce(() -> {
                 semaphore.release();
-                logger.info("--> [{}] released [{}]", shardId, acquireId);
+                permitsTracking.remove(acquireId);
+                // logger.info("--> [{}] released [{}]", shardId, acquireId);
             });
         } else {
             // this should never happen, if it does something is deeply wrong
