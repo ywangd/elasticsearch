@@ -3975,11 +3975,13 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                     return;
                 } else {
                     logger.trace("scheduledRefresh: refresh with source [schedule]");
+                    logger.info("--> scheduledRefresh: refresh with source [schedule]");
                     engine.maybeRefresh("schedule", l.map(Engine.RefreshResult::refreshed));
                     return;
                 }
             }
             logger.trace("scheduledRefresh: no refresh needed");
+            logger.info("--> scheduledRefresh: no refresh needed");
             engine.maybePruneDeletes(); // try to prune the deletes in the engine if we accumulated some
             l.onResponse(false);
         });

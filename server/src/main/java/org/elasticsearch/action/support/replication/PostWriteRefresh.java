@@ -22,6 +22,8 @@ import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.translog.Translog;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
@@ -29,6 +31,7 @@ import org.elasticsearch.transport.TransportService;
 import java.util.concurrent.Executor;
 
 public class PostWriteRefresh {
+    private static final Logger logger = LogManager.getLogger(PostWriteRefresh.class);
 
     public static final String POST_WRITE_REFRESH_ORIGIN = "post_write_refresh";
     public static final String FORCED_REFRESH_AFTER_INDEX = "refresh_flag_index";
@@ -98,6 +101,7 @@ public class PostWriteRefresh {
     }
 
     private static void waitUntil(IndexShard indexShard, Translog.Location location, ActionListener<Boolean> listener) {
+        logger.info("--> waitUntil {} [{}]", indexShard, location);
         if (location != null) {
             indexShard.addRefreshListener(location, listener::onResponse);
         } else {
@@ -112,6 +116,7 @@ public class PostWriteRefresh {
         boolean forced,
         @Nullable TimeValue postWriteRefreshTimeout
     ) {
+        logger.info("--> refreshUnpromotables {}, [{}], [{}]", indexShard, location, forced);
         Engine engineOrNull = indexShard.getEngineOrNull();
         if (engineOrNull == null) {
             listener.onFailure(new AlreadyClosedException("Engine closed during refresh."));
@@ -136,6 +141,7 @@ public class PostWriteRefresh {
         ActionListener<Boolean> listener,
         @Nullable TimeValue postWriteRefreshTimeout
     ) {
+        logger.info("--> sendUnpromotableRequests {}, [{}], [{}]", indexShard, generation, wasForced);
         UnpromotableShardRefreshRequest unpromotableReplicaRequest = new UnpromotableShardRefreshRequest(
             indexShard.getReplicationGroup().getRoutingTable(),
             indexShard.getOperationPrimaryTerm(),
@@ -147,7 +153,10 @@ public class PostWriteRefresh {
             TransportUnpromotableShardRefreshAction.NAME,
             unpromotableReplicaRequest,
             TransportRequestOptions.timeout(postWriteRefreshTimeout),
-            new ActionListenerResponseHandler<>(listener.safeMap(r -> wasForced), in -> ActionResponse.Empty.INSTANCE, refreshExecutor)
+            new ActionListenerResponseHandler<>(listener.safeMap(r -> {
+                logger.info("--> response got from unpromotable refresh {}, [{}] [{}]", indexShard, generation, wasForced);
+                return wasForced;
+            }), in -> ActionResponse.Empty.INSTANCE, refreshExecutor)
         );
     }
 
