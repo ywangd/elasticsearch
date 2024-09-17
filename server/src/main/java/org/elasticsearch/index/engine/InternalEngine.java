@@ -3382,6 +3382,7 @@ public class InternalEngine extends Engine {
         this.flushListener.addOrNotify(location, new ActionListener<>() {
             @Override
             public void onResponse(Long generation) {
+                logger.info("--> flushListener fired [{}]", generation);
                 waitForCommitDurability(generation, listener.map(v -> generation));
             }
 

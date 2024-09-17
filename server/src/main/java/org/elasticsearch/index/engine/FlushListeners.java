@@ -75,7 +75,7 @@ public class FlushListeners implements Closeable {
     }
 
     public void afterFlush(final long generation, final Translog.Location lastCommitLocation) {
-        logger.info("--> afterFlush [{}], [{}]", generation, lastCommitLocation);
+        logger.info("--> listener afterFlush [{}], [{}]", generation, lastCommitLocation);
         this.lastCommit = new Tuple<>(generation, lastCommitLocation);
 
         List<Tuple<Translog.Location, ActionListener<Long>>> listenersToFire = null;
