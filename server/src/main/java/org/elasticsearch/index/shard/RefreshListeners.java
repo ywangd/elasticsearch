@@ -133,6 +133,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
         requireNonNull(location, "location cannot be null");
 
         if (lastRefreshedLocation != null && lastRefreshedLocation.compareTo(location) >= 0) {
+            logger.info("--> location already visible [{}]", location);
             // Location already visible, just call the listener
             listener.accept(false);
             return true;
@@ -157,6 +158,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
                 // We have a free slot so register the listener
                 listeners.add(new Tuple<>(location, contextPreservingListener));
                 locationRefreshListeners = listeners;
+                logger.info("--> added listener for [{}]", location);
                 return false;
             }
         }
@@ -299,7 +301,9 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
 
     @Override
     public void beforeRefresh() throws IOException {
-        currentRefreshLocation = currentRefreshLocationSupplier.get();
+        final Translog.Location newRefreshLocation = currentRefreshLocationSupplier.get();
+        logger.info("--> beforeRefresh old=[{}], new=[{}]", currentRefreshLocation, newRefreshLocation);
+        currentRefreshLocation = newRefreshLocation;
         currentRefreshCheckpoint = processedCheckpointSupplier.getAsLong();
         currentRefreshStartTime = System.nanoTime();
     }
@@ -330,6 +334,7 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
             if (locationCandidates == null && checkpointCandidates == null) {
                 return;
             }
+            logger.info("--> afterRefresh setting null");
             locationRefreshListeners = null;
             checkpointRefreshListeners = null;
         }
@@ -409,9 +414,13 @@ public final class RefreshListeners implements ReferenceManager.RefreshListener,
             }
         }
         // Lastly, fire the listeners that are ready
+        if (locationListenersToFire != null) {
+            logger.info("--> fire refresh location listeners [{}]", currentRefreshLocation);
+        }
         fireListeners(locationListenersToFire);
         fireCheckpointListeners(checkpointListenersToFire);
         failCheckpointListeners(checkpointListenersToFail, new AlreadyClosedException("shard is closed"));
+        logger.info("--> at the end of afterRefresh [{}], [{}]", locationRefreshListeners, checkpointRefreshListeners);
     }
 
     /**

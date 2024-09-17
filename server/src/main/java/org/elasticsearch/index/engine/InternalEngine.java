@@ -2235,9 +2235,14 @@ public class InternalEngine extends Engine {
                     // (2) indexWriter has committed all the changes (checks must be done in this order).
                     // If the indexWriter has uncommitted changes, they will be flushed by the next flush as intended.
                     final Translog.Location writeLocationAfterFlush = translog.getLastWriteLocation();
-                    if (writeLocationAfterFlush.equals(commitLocation) == false && hasUncommittedChanges() == false) {
+                    final boolean sameWriteLocation = writeLocationAfterFlush.equals(commitLocation);
+                    final boolean againHasUncommittedChanges = hasUncommittedChanges();
+                    if (sameWriteLocation == false && againHasUncommittedChanges == false) {
                         assert writeLocationAfterFlush.compareTo(commitLocation) > 0 : writeLocationAfterFlush + " <= " + commitLocation;
+                        logger.info("--> updating {} after commit: [{}} -> [{}}", shardId, commitLocation, writeLocationAfterFlush);
                         commitLocation = writeLocationAfterFlush;
+                    } else {
+                        logger.info("--> NOT updating {} because [{}],[{}]", shardId, sameWriteLocation, againHasUncommittedChanges);
                     }
                     // Use the timestamp from when the flush started, but only update it in case of success, so that any exception in
                     // the above lines would not lead the engine to think that it recently flushed, when it did not.

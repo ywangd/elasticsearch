@@ -45,6 +45,7 @@ public class FlushListeners implements Closeable {
         requireNonNull(location, "location cannot be null");
 
         Tuple<Long, Translog.Location> lastCommitBeforeSynchronized = lastCommit;
+        logger.info("--> addFlushListener [{}], lastCommitBeforeSynchronized=[{}]", location, lastCommitBeforeSynchronized);
         if (lastCommitBeforeSynchronized != null && lastCommitBeforeSynchronized.v2().compareTo(location) >= 0) {
             // Location already visible, just call the listener
             listener.onResponse(lastCommitBeforeSynchronized.v1());
@@ -69,10 +70,12 @@ public class FlushListeners implements Closeable {
             // We have a free slot so register the listener
             listeners.add(new Tuple<>(location, contextPreservingListener));
             locationCommitListeners = listeners;
+            logger.info("--> flushListener added for [{}], final lastCommit=[{}]", location, lastCommitBeforeSynchronized);
         }
     }
 
     public void afterFlush(final long generation, final Translog.Location lastCommitLocation) {
+        logger.info("--> afterFlush [{}], [{}]", generation, lastCommitLocation);
         this.lastCommit = new Tuple<>(generation, lastCommitLocation);
 
         List<Tuple<Translog.Location, ActionListener<Long>>> listenersToFire = null;
@@ -106,6 +109,7 @@ public class FlushListeners implements Closeable {
 
     private void fireListeners(final long generation, final List<Tuple<Translog.Location, ActionListener<Long>>> listenersToFire) {
         if (listenersToFire != null) {
+            logger.info("--> fire flush location listener for [{}]", generation);
             for (final Tuple<Translog.Location, ActionListener<Long>> listener : listenersToFire) {
                 try {
                     listener.v2().onResponse(generation);

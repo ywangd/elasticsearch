@@ -101,7 +101,7 @@ public class PostWriteRefresh {
     }
 
     private static void waitUntil(IndexShard indexShard, Translog.Location location, ActionListener<Boolean> listener) {
-        logger.info("--> waitUntil {} [{}]", indexShard, location);
+        logger.info("--> waitUntil {} [{}]", indexShard.shardId(), location);
         if (location != null) {
             indexShard.addRefreshListener(location, listener::onResponse);
         } else {
@@ -116,7 +116,7 @@ public class PostWriteRefresh {
         boolean forced,
         @Nullable TimeValue postWriteRefreshTimeout
     ) {
-        logger.info("--> refreshUnpromotables {}, [{}], [{}]", indexShard, location, forced);
+        logger.info("--> refreshUnpromotables {}, [{}], [{}]", indexShard.shardId(), location, forced);
         Engine engineOrNull = indexShard.getEngineOrNull();
         if (engineOrNull == null) {
             listener.onFailure(new AlreadyClosedException("Engine closed during refresh."));
@@ -141,7 +141,7 @@ public class PostWriteRefresh {
         ActionListener<Boolean> listener,
         @Nullable TimeValue postWriteRefreshTimeout
     ) {
-        logger.info("--> sendUnpromotableRequests {}, [{}], [{}]", indexShard, generation, wasForced);
+        logger.info("--> sendUnpromotableRequests {}, [{}], [{}]", indexShard.shardId(), generation, wasForced);
         UnpromotableShardRefreshRequest unpromotableReplicaRequest = new UnpromotableShardRefreshRequest(
             indexShard.getReplicationGroup().getRoutingTable(),
             indexShard.getOperationPrimaryTerm(),
@@ -154,7 +154,7 @@ public class PostWriteRefresh {
             unpromotableReplicaRequest,
             TransportRequestOptions.timeout(postWriteRefreshTimeout),
             new ActionListenerResponseHandler<>(listener.safeMap(r -> {
-                logger.info("--> response got from unpromotable refresh {}, [{}] [{}]", indexShard, generation, wasForced);
+                logger.info("--> response got from unpromotable refresh {}, [{}] [{}]", indexShard.shardId(), generation, wasForced);
                 return wasForced;
             }), in -> ActionResponse.Empty.INSTANCE, refreshExecutor)
         );

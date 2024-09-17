@@ -3975,7 +3975,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                     return;
                 } else {
                     logger.trace("scheduledRefresh: refresh with source [schedule]");
-                    logger.info("--> scheduledRefresh: refresh with source [schedule]");
+                    logger.info("--> scheduledRefresh: refresh with source [schedule] [{}}", listenerNeedsRefresh);
                     engine.maybeRefresh("schedule", l.map(Engine.RefreshResult::refreshed));
                     return;
                 }
