@@ -20,6 +20,8 @@ import org.elasticsearch.common.util.concurrent.FutureUtils;
 import org.elasticsearch.common.util.concurrent.UncategorizedExecutionException;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.Transports;
 
@@ -31,6 +33,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 
 public class PlainActionFuture<T> implements ActionFuture<T>, ActionListener<T> {
+    private static final Logger logger = LogManager.getLogger(PlainActionFuture.class);
 
     @Override
     public void onResponse(@Nullable T result) {
@@ -39,7 +42,12 @@ public class PlainActionFuture<T> implements ActionFuture<T>, ActionListener<T> 
 
     @Override
     public void onFailure(Exception e) {
-        // assert assertCompleteAllowed();
+        try {
+            assert assertCompleteAllowed();
+        } catch (AssertionError ae) {
+            logger.info("--> AssertionError while onFailure", e);
+            throw ae;
+        }
         if (sync.setException(Objects.requireNonNull(e))) {
             done(false);
         }
