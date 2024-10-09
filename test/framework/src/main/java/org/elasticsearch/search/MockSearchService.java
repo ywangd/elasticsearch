@@ -16,6 +16,8 @@ import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.indices.ExecutorSelector;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.node.MockNode;
 import org.elasticsearch.node.ResponseCollectorService;
 import org.elasticsearch.plugins.Plugin;
@@ -36,6 +38,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class MockSearchService extends SearchService {
+    private static final Logger logger = LogManager.getLogger(MockSearchService.class);
+
     /**
      * Marker plugin used by {@link MockNode} to enable {@link MockSearchService}.
      */
@@ -54,11 +58,14 @@ public class MockSearchService extends SearchService {
     public static void assertNoInFlightContext() {
         final Map<ReaderContext, Throwable> copy = new HashMap<>(ACTIVE_SEARCH_CONTEXTS);
         if (copy.isEmpty() == false) {
+            final Map.Entry<ReaderContext, Throwable> entry = copy.entrySet().iterator().next();
             throw new AssertionError(
                 "There are still ["
                     + copy.size()
-                    + "] in-flight contexts. The first one's creation site is listed as the cause of this exception.",
-                copy.values().iterator().next()
+                    + "] in-flight contexts. The first one's ("
+                    + entry.getKey().toString()
+                    + ") creation site is listed as the cause of this exception.",
+                entry.getValue()
             );
         }
     }
@@ -67,7 +74,9 @@ public class MockSearchService extends SearchService {
      * Add an active search context to the list of tracked contexts. Package private for testing.
      */
     static void addActiveContext(ReaderContext context) {
-        ACTIVE_SEARCH_CONTEXTS.put(context, new RuntimeException(context.toString()));
+        final String contextString = context.toString();
+        ACTIVE_SEARCH_CONTEXTS.put(context, new RuntimeException(contextString));
+        logger.info("--> addActiveContext [{}]", contextString);
     }
 
     /**
@@ -75,6 +84,7 @@ public class MockSearchService extends SearchService {
      */
     static void removeActiveContext(ReaderContext context) {
         ACTIVE_SEARCH_CONTEXTS.remove(context);
+        logger.info("--> removeActiveContext [{}]", context.toString());
     }
 
     public MockSearchService(

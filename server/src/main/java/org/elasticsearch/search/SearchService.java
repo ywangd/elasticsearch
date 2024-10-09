@@ -476,6 +476,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         final Index index = context.indexShard().shardId().getIndex();
         if (indicesService.hasIndex(index) == false) {
             removeReaderContext(id);
+            logger.info("--> immediately removed readerContext [{}]", context.toString());
             throw new IndexNotFoundException(index);
         }
     }

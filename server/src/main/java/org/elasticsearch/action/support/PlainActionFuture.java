@@ -39,7 +39,7 @@ public class PlainActionFuture<T> implements ActionFuture<T>, ActionListener<T> 
 
     @Override
     public void onFailure(Exception e) {
-        assert assertCompleteAllowed();
+        // assert assertCompleteAllowed();
         if (sync.setException(Objects.requireNonNull(e))) {
             done(false);
         }

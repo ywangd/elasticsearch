@@ -73,6 +73,11 @@ public class ReaderContext implements Releasable {
         this.refCounted = AbstractRefCounted.of(this::doClose);
     }
 
+    @Override
+    public String toString() {
+        return "ReaderContext{" + "id=" + id + ", indexShard=" + indexShard.shardId() + '}';
+    }
+
     public void validate(TransportRequest request) {
         indexShard.getSearchOperationListener().validateReaderContext(this, request);
     }
