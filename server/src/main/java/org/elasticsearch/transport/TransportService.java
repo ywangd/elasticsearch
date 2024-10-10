@@ -1059,7 +1059,7 @@ public class TransportService extends AbstractLifecycleComponent
         if (lifecycle.stoppedOrClosed()) {
             // too late to try and dispatch anywhere else, let's just use the calling thread
             return EsExecutors.DIRECT_EXECUTOR_SERVICE;
-        } else if (handlerExecutor == EsExecutors.DIRECT_EXECUTOR_SERVICE) {
+        } else if (handlerExecutor == EsExecutors.DIRECT_EXECUTOR_SERVICE && enableStackOverflowAvoidance) {
             // if the handler is non-forking then dispatch to GENERIC to avoid a possible stack overflow
             return threadPool.generic();
         } else {
