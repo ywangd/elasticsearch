@@ -386,6 +386,7 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
     @Override
     public final void incRef() {
         refCounter.incRef();
+        logger.info("--> incRef [{}]", shardId);
     }
 
     /**
@@ -403,7 +404,9 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
      */
     @Override
     public final boolean tryIncRef() {
-        return refCounter.tryIncRef();
+        final boolean success = refCounter.tryIncRef();
+        logger.info("--> tryIncRef [{}] is [{}]", shardId, success);
+        return success;
     }
 
     /**
@@ -414,7 +417,9 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
      */
     @Override
     public final boolean decRef() {
-        return refCounter.decRef();
+        final boolean toZero = refCounter.decRef();
+        logger.info("--> decRef [{}] is [{}]", shardId, toZero);
+        return toZero;
     }
 
     @Override
@@ -428,6 +433,7 @@ public class Store extends AbstractIndexShardComponent implements Closeable, Ref
             // only do this once!
             decRef();
             logger.debug("store reference count on close: {}", refCounter.refCount());
+            logger.debug("--> store [{}] ref count on close: {}", shardId, refCounter.refCount());
         }
     }
 
