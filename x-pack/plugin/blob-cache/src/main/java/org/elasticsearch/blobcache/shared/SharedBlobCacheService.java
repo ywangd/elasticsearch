@@ -1104,6 +1104,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                         assert blobCacheService.regionOwners.get(ioRef) == CacheFileRegion.this;
                         assert CacheFileRegion.this.hasReferences() : CacheFileRegion.this;
                         blobCacheService.writeCount.increment();
+                        logger.info("--> filled gap [{}]", gap);
                         gap.onCompletion();
                         return null;
                     }).delegateResponse((delegate, e) -> failGapAndListener(gap, delegate, e))
@@ -1244,6 +1245,7 @@ public class SharedBlobCacheService<KeyType> implements Releasable {
                 ioExecutor,
                 readFuture
             );
+            logger.info("--> waiting for future");
             return readFuture.get();
         }
 

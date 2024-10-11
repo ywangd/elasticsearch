@@ -1364,6 +1364,7 @@ public class TransportService extends AbstractLifecycleComponent
 
     @Override
     public void onConnectionClosed(Transport.Connection connection) {
+        logger.info("--> connection to [{}] closed", connection.getNode().getName());
         List<Transport.ResponseContext<? extends TransportResponse>> pruned = responseHandlers.prune(
             h -> h.connection().getCacheKey().equals(connection.getCacheKey())
         );

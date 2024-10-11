@@ -231,6 +231,7 @@ public class ClusterConnectionManager implements ConnectionManager {
                             } finally {
                                 conn.addCloseListener(ActionListener.running(() -> {
                                     connectedNodes.remove(node, conn);
+                                    logger.info("--> remove conn to node [{}]", conn.getNode().getName());
                                     connectionListener.onNodeDisconnected(node, conn);
                                     managerRefs.decRef();
                                 }));
