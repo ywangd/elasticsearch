@@ -225,9 +225,12 @@ public class Netty4IncrementalRequestHandlingIT extends ESNetty4IntegTestCase {
             assertBusy(() -> assertNotNull(handler.stream.buf()));
             assertFalse(handler.streamClosed);
 
-            if (randomBoolean() || true) {
+            if (randomBoolean()) {
+                // This branch may not really be a valid test since it does not happen in production plus
+                // no easy way to handle error purely within netty event loop.
                 handler.stream.channel().eventLoop().submit(() -> { throw new RuntimeException("simulated exception"); });
             } else {
+                // This branch is more likely to happen, i.e. a downstream handler throw uncaught exception
                 handler.shouldThrowInsideHandleChunk = true;
                 handler.stream.next();
             }
