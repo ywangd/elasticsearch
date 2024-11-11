@@ -123,6 +123,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
             throw new IllegalStateException("can't set initial state when started");
         }
         assert state.get() == null : "state is already set";
+        logger.info("--> setInitialState routingNodes=[{}]", initialState.getRoutingNodes());
         state.set(initialState);
     }
 
@@ -311,6 +312,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         final Supplier<ClusterState> clusterStateSupplier,
         final ActionListener<Void> listener
     ) {
+        logger.info("--> onNewClusterState [{}]", source);
         submitStateUpdateTask(source, Priority.HIGH, currentState -> {
             ClusterState nextState = clusterStateSupplier.get();
             if (nextState != null) {
@@ -505,6 +507,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         nodeConnectionsService.disconnectFromNodesExcept(newClusterState.nodes());
 
         logger.debug("set locally applied cluster state to version {}", newClusterState.version());
+        logger.info("--> applyChanges shards=[{}] routingNodes=[{}]", newClusterState.metadata().stream().count(), newClusterState.getRoutingNodes());
         state.set(newClusterState);
 
         callClusterStateListeners(clusterChangedEvent, stopWatch);

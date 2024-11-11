@@ -9,6 +9,8 @@
 
 package org.elasticsearch.cluster;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.TransportVersions;
 import org.elasticsearch.Version;
@@ -112,6 +114,7 @@ import static org.elasticsearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK
  */
 public class ClusterState implements ChunkedToXContent, Diffable<ClusterState> {
 
+    private static final Logger logger = LogManager.getLogger(ClusterState.class);
     public static final ClusterState EMPTY_STATE = builder(ClusterName.DEFAULT).build();
 
     public interface Custom extends NamedDiffable<Custom>, ChunkedToXContent {
@@ -239,6 +242,11 @@ public class ClusterState implements ChunkedToXContent, Diffable<ClusterState> {
         assert compatibilityVersions.isEmpty()
             || blocks.hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK)
             || assertEventIngestedIsUnknownInMixedClusters(metadata, this.minVersions);
+//        if (routingNodes != null) {
+//            logger.info("--> routingNodes unassigned=[{}], assigned=[{}]", routingNodes.unassigned() == null ? "-1" : routingNodes.unassigned().size(), routingNodes.getAssignedShards().size());
+//        } else {
+//            logger.info("--> routingNodes is null");
+//        }
     }
 
     private boolean assertEventIngestedIsUnknownInMixedClusters(Metadata metadata, CompatibilityVersions compatibilityVersions) {

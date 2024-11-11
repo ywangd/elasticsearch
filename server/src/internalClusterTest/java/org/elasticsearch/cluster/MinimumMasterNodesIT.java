@@ -279,6 +279,7 @@ public class MinimumMasterNodesIT extends ESIntegTestCase {
         logger.info("--> start back the 2 nodes ");
         internalCluster().startNodes(nonMasterDataPathSettings1, nonMasterDataPathSettings2);
 
+        logger.info("--> after restart nodes");
         internalCluster().validateClusterFormed();
         ensureGreen();
 
