@@ -29,6 +29,7 @@ import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.ESIntegTestCase.ClusterScope;
 import org.elasticsearch.test.ESIntegTestCase.Scope;
 import org.elasticsearch.test.disruption.NetworkDisruption;
+import org.elasticsearch.test.junit.annotations.TestIssueLogging;
 import org.elasticsearch.test.transport.MockTransportService;
 
 import java.util.ArrayList;
@@ -210,6 +211,10 @@ public class MinimumMasterNodesIT extends ESIntegTestCase {
         }
     }
 
+    @TestIssueLogging(
+        issueUrl = "https://github.com/elastic/elasticsearch/issues/115885",
+        value = "org.elasticsearch.cluster.coordination:TRACE,org.elasticsearch.cluster.service.ClusterApplierService:TRACE"
+    )
     public void testThreeNodesNoMasterBlock() throws Exception {
         internalCluster().setBootstrapMasterNodeIndex(2);
 
@@ -278,6 +283,8 @@ public class MinimumMasterNodesIT extends ESIntegTestCase {
 
         logger.info("--> start back the 2 nodes ");
         internalCluster().startNodes(nonMasterDataPathSettings1, nonMasterDataPathSettings2);
+
+        logger.info("--> after restart");
 
         internalCluster().validateClusterFormed();
         ensureGreen();

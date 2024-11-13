@@ -330,6 +330,7 @@ public class JoinHelper {
                     // disruptive. To avoid this we send the join from the applier thread which ensures that it's not busy doing something
                     // else.
                     pendingJoinInfo.message = PENDING_JOIN_WAITING_APPLIER;
+                    logger.info("--> joining [{}]", destination.getName());
                     clusterApplier.onNewClusterState(
                         "joining " + destination.descriptionWithoutAttributes(),
                         () -> null,

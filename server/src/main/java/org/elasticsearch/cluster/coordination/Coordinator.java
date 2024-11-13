@@ -2169,6 +2169,7 @@ public class Coordinator extends AbstractLifecycleComponent implements ClusterSt
             assert transportService.getThreadPool().getThreadContext().isSystemContext();
             assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
             try {
+                logger.info("--> sendApplyCommit [{}] to [{}]", applyCommit, destination.getName());
                 transportService.sendRequest(
                     destination,
                     COMMIT_STATE_ACTION_NAME,
