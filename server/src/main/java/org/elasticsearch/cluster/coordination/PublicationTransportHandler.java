@@ -38,6 +38,7 @@ import org.elasticsearch.common.util.LazyInitializable;
 import org.elasticsearch.core.AbstractRefCounted;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.Releasables;
+import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.BytesTransportRequest;
@@ -154,6 +155,7 @@ public class PublicationTransportHandler {
                 logger.debug("received full cluster state version [{}] with size [{}]", incomingState.version(), request.bytes().length());
                 acceptState(incomingState, publishResponseListener.map(response -> {
                     lastSeenClusterState.set(incomingState);
+                    logAcceptedState(incomingState);
                     return response;
                 }));
             } else {
@@ -173,6 +175,7 @@ public class PublicationTransportHandler {
                     );
                     acceptState(incomingState, publishResponseListener.map(response -> {
                         lastSeenClusterState.compareAndSet(lastSeen, incomingState);
+                        logAcceptedState(incomingState);
                         return response;
                     }));
                 }
@@ -180,6 +183,18 @@ public class PublicationTransportHandler {
         } finally {
             IOUtils.close(in);
         }
+    }
+
+    private static void logAcceptedState(ClusterState incomingState) {
+        logger.info(
+            "--> accepted state [{}/{}], recovered=[{}], nIndices=[{}], nRoutings=[{}], routingNodes=[{}]",
+            incomingState.term(),
+            incomingState.version(),
+            incomingState.blocks().hasGlobalBlock(GatewayService.STATE_NOT_RECOVERED_BLOCK),
+            incomingState.metadata().indices().keySet().size(),
+            incomingState.routingTable().indicesRouting().keySet().size(),
+            incomingState.getRoutingNodes()
+        );
     }
 
     private ClusterState deserializeAndApplyDiff(BytesTransportRequest request, StreamInput in, ClusterState currentState)

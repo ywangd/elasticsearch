@@ -218,7 +218,8 @@ public class DesiredBalanceReconciler {
                 }
             }
 
-            assert shardCounts.isEmpty() : shardCounts;
+            assert shardCounts.isEmpty()
+                : shardCounts + "\nroutingNodes=" + routingNodes + "\nindices=" + allocation.metadata().indices().keySet();
 
             return true;
         }

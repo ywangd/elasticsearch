@@ -405,6 +405,13 @@ public class RoutingNodes implements Iterable<RoutingNode> {
         for (ShardRouting shardEntry : unassignedShards) {
             sb.append("--------").append(shardEntry.shortSummary()).append('\n');
         }
+        sb.append("---- assigned\n");
+        for (var assignmentEntry : assignedShards.entrySet()) {
+            sb.append("--------").append(assignmentEntry.getKey()).append('\n');
+            for (var shard : assignmentEntry.getValue()) {
+                sb.append("------------").append(shard.shortSummary()).append('\n');
+            }
+        }
         return sb.toString();
     }
 
