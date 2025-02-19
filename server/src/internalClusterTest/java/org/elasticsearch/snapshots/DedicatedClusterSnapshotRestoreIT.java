@@ -60,6 +60,7 @@ import org.elasticsearch.test.InternalTestCluster;
 import org.elasticsearch.test.MockLog;
 import org.elasticsearch.test.disruption.BusyMasterServiceDisruption;
 import org.elasticsearch.test.disruption.ServiceDisruptionScheme;
+import org.elasticsearch.test.junit.annotations.TestIssueLogging;
 import org.elasticsearch.test.rest.FakeRestRequest;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -640,6 +641,14 @@ public class DedicatedClusterSnapshotRestoreIT extends AbstractSnapshotIntegTest
      * can be restored when the node the shrunken index was created on is no longer part of
      * the cluster.
      */
+    @TestIssueLogging(
+        value = "org.elasticsearch.indices.cluster.IndicesClusterStateService:TRACE,"
+            + "org.elasticsearch.common.util.concurrent.AbstractThrottledTaskRunner:TRACE,"
+            + "org.elasticsearch.indices.IndicesService:TRACE,"
+            + "org.elasticsearch.index.IndexService:TRACE,"
+            + "org.elasticsearch.index.shard.IndexShard:TRACE",
+        issueUrl = "https://github.com/elastic/elasticsearch/issues/121717"
+    )
     public void testRestoreShrinkIndex() throws Exception {
         logger.info("-->  starting a master node and a data node");
         internalCluster().startMasterOnlyNode();
