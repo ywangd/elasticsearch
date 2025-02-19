@@ -565,6 +565,7 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler, 
     }
 
     public void shutdown() {
+        logger.info("--> shutting down thread pool");
         stopCachedTimeThread();
         scheduler.shutdown();
         for (ExecutorHolder executor : executors.values()) {
@@ -573,6 +574,7 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler, 
                 executor.executor().shutdown();
             }
         }
+        logger.info("all managed thread pools are shut down");
     }
 
     public void shutdownNow() {

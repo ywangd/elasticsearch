@@ -360,6 +360,7 @@ public class IndicesService extends AbstractLifecycleComponent
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             } finally {
+                logger.info("--> closeLatch.countDown()");
                 closeLatch.countDown();
             }
         });
@@ -439,6 +440,7 @@ public class IndicesService extends AbstractLifecycleComponent
     @Override
     protected void doClose() throws IOException {
         indicesRefCount.decRef();
+        logger.info("--> IndicesService#doClose");
     }
 
     /**
