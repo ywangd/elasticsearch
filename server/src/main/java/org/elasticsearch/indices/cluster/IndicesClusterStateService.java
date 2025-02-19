@@ -427,6 +427,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
 
                         @Override
                         protected void doRun() throws Exception {
+                            logger.info("--> running the runnable for index [{}]", index);
                             final TimeValue timeout = TimeValue.timeValueMinutes(30);
                             try {
                                 // we are waiting until we can lock the index / all shards on the node and then we ack the delete of the store
@@ -449,6 +450,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
                             return "processPendingDeletes[" + index + "]";
                         }
                     });
+                    logger.info("--> andThenAccept submitted the runnable for index [{}]", index);
                 });
                 indexServiceClosedListener.addListener(getShardsClosedListener());
             }

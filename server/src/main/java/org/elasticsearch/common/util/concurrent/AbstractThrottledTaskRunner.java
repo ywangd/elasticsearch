@@ -149,6 +149,7 @@ public class AbstractThrottledTaskRunner<T extends ActionListener<Releasable>> {
                         return task.toString();
                     }
                 });
+                logger.info("--> [{}] submitted task [{}]", taskRunnerName, task);
             }
         }
     }
