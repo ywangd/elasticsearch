@@ -91,6 +91,7 @@ public class AbstractThrottledTaskRunner<T extends ActionListener<Releasable>> {
                 // non-empty queue and no workers!
                 if (tasks.peek() == null) break;
             } else {
+                logger.info("--> [{}] polled task [{}]", taskRunnerName, task);
                 final boolean isForceExecution = isForceExecution(task);
                 executor.execute(new AbstractRunnable() {
                     private boolean rejected; // need not be volatile - if we're rejected then that happens-before calling onAfter
@@ -99,6 +100,13 @@ public class AbstractThrottledTaskRunner<T extends ActionListener<Releasable>> {
                         // To avoid missing to run tasks that are enqueued and waiting, we check the queue again once running
                         // a task is finished.
                         int decremented = runningTasks.decrementAndGet();
+                        logger.info(
+                            "--> [{}] released for task [{}], decremented=[{}], rejected=[{}]",
+                            taskRunnerName,
+                            task,
+                            decremented,
+                            rejected
+                        );
                         assert decremented >= 0;
 
                         if (rejected == false) {

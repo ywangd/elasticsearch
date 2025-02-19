@@ -417,36 +417,39 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
                 }
             }
             if (indexSettings != null) {
-                indexServiceClosedListener.andThenAccept(ignored -> threadPool.generic().execute(new AbstractRunnable() {
-                    @Override
-                    public void onFailure(Exception e) {
-                        logger.warn(() -> "[" + index + "] failed to complete pending deletion for index", e);
-                    }
-
-                    @Override
-                    protected void doRun() throws Exception {
-                        final TimeValue timeout = TimeValue.timeValueMinutes(30);
-                        try {
-                            // we are waiting until we can lock the index / all shards on the node and then we ack the delete of the store
-                            // to the master. If we can't acquire the locks here immediately there might be a shard of this index still
-                            // holding on to the lock due to a "currently canceled recovery" or so. The shard will delete itself BEFORE the
-                            // lock is released so it's guaranteed to be deleted by the time we get the lock
-                            indicesService.processPendingDeletes(index, indexSettings, timeout);
-                        } catch (ShardLockObtainFailedException exc) {
-                            logger.warn(
-                                Strings.format("[%s] failed to lock all shards for index - timed out after [%s]]", index, timeout),
-                                exc
-                            );
-                        } catch (InterruptedException e) {
-                            logger.warn("[{}] failed to lock all shards for index - interrupted", index);
+                indexServiceClosedListener.andThenAccept(ignored -> {
+                    logger.info("--> andThenAccept index [{}]", index);
+                    threadPool.generic().execute(new AbstractRunnable() {
+                        @Override
+                        public void onFailure(Exception e) {
+                            logger.warn(() -> "[" + index + "] failed to complete pending deletion for index", e);
                         }
-                    }
 
-                    @Override
-                    public String toString() {
-                        return "processPendingDeletes[" + index + "]";
-                    }
-                }));
+                        @Override
+                        protected void doRun() throws Exception {
+                            final TimeValue timeout = TimeValue.timeValueMinutes(30);
+                            try {
+                                // we are waiting until we can lock the index / all shards on the node and then we ack the delete of the store
+                                // to the master. If we can't acquire the locks here immediately there might be a shard of this index still
+                                // holding on to the lock due to a "currently canceled recovery" or so. The shard will delete itself BEFORE the
+                                // lock is released so it's guaranteed to be deleted by the time we get the lock
+                                indicesService.processPendingDeletes(index, indexSettings, timeout);
+                            } catch (ShardLockObtainFailedException exc) {
+                                logger.warn(
+                                    Strings.format("[%s] failed to lock all shards for index - timed out after [%s]]", index, timeout),
+                                    exc
+                                );
+                            } catch (InterruptedException e) {
+                                logger.warn("[{}] failed to lock all shards for index - interrupted", index);
+                            }
+                        }
+
+                        @Override
+                        public String toString() {
+                            return "processPendingDeletes[" + index + "]";
+                        }
+                    });
+                });
                 indexServiceClosedListener.addListener(getShardsClosedListener());
             }
         }
