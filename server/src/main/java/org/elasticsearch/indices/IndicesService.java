@@ -1439,6 +1439,7 @@ public class IndicesService extends AbstractLifecycleComponent
                     }
                     if (remove.isEmpty() == false) {
                         logger.warn("{} still pending deletes present for shards {} - retrying", index, remove.toString());
+                        logger.info("--> generic threadpool status [{}]\nstats=[{}]", threadPool.generic().toString(), threadPool.stats());
                         Thread.sleep(sleepTime);
                         sleepTime = Math.min(maxSleepTimeMs, sleepTime * 2); // increase the sleep time gradually
                         logger.debug("{} schedule pending delete retry after {} ms", index, sleepTime);
