@@ -561,6 +561,14 @@ public class Node implements Closeable {
         toClose.add(() -> stopWatch.stop().start("script"));
         toClose.add(injector.getInstance(ScriptService.class));
 
+        toClose.add(() -> {
+            try {
+                injector.getInstance(IndicesService.class).awaitClose(1, TimeUnit.MINUTES);
+            } catch (InterruptedException e) {
+                logger.warn("--> interrupted while closing indices", e);
+            }
+        });
+
         toClose.add(() -> stopWatch.stop().start("thread_pool"));
         toClose.add(() -> injector.getInstance(ThreadPool.class).shutdown());
         // Don't call shutdownNow here, it might break ongoing operations on Lucene indices.
