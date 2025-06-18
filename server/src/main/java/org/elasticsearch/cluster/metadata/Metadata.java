@@ -2015,8 +2015,9 @@ public class Metadata implements Diffable<Metadata>, ChunkedToXContent {
                 } else if (token == XContentParser.Token.START_ARRAY) {
                     switch (currentFieldName) {
                         case "projects" -> {
-                            assert builder.projectMetadataBuilders.isEmpty()
-                                : "expect empty projectMetadata, but got " + builder.projectMetadataBuilders;
+                            assert builder.projectMetadataBuilders.isEmpty() && builder.projectMetadatas.isEmpty()
+                                : "expect empty projectMetadata, but got "
+                                    + Sets.union(builder.projectMetadataBuilders.keySet(), builder.projectMetadatas.keySet());
                             readProjects(parser, builder);
                         }
                         default -> throw new IllegalArgumentException("Unexpected field [" + currentFieldName + "]");
