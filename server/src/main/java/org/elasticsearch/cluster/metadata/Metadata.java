@@ -1506,7 +1506,7 @@ public class Metadata implements Diffable<Metadata>, ChunkedToXContent {
          * legacy delegation methods such as {@link #indices(Map)} which expect to have a mutable project
          */
         private final Map<ProjectId, ProjectMetadata.Builder> projectMetadataBuilders;
-        private final ImmutableOpenMap.Builder<ProjectId, ProjectMetadata> projectMetadatas;
+        private final Map<ProjectId, ProjectMetadata> projectMetadatas;
 
         private final ImmutableOpenMap.Builder<String, ReservedStateMetadata> reservedStateMetadata;
 
@@ -1515,7 +1515,7 @@ public class Metadata implements Diffable<Metadata>, ChunkedToXContent {
             clusterUUID = UNKNOWN_CLUSTER_UUID;
             customs = ImmutableOpenMap.builder();
             projectMetadataBuilders = new HashMap<>();
-            projectMetadatas = ImmutableOpenMap.builder();
+            projectMetadatas = new HashMap<>();
             reservedStateMetadata = ImmutableOpenMap.builder();
         }
 
@@ -1529,19 +1529,27 @@ public class Metadata implements Diffable<Metadata>, ChunkedToXContent {
             this.version = metadata.version;
             this.customs = ImmutableOpenMap.builder(metadata.customs);
             this.projectMetadataBuilders = new HashMap<>();
-            this.projectMetadatas = ImmutableOpenMap.builder(metadata.projectMetadata);
+            this.projectMetadatas = new HashMap<>(metadata.projectMetadata);
             this.reservedStateMetadata = ImmutableOpenMap.builder(metadata.reservedStateMetadata);
         }
 
-        private ProjectMetadata.Builder getOrCreateProjectBuilder(ProjectId projectId) {
+        private ProjectMetadata.Builder getOrConvertProjectBuilder(ProjectId projectId) {
+            return getOrConvertProjectBuilder(projectId, true);
+        }
+
+        private ProjectMetadata.Builder getOrConvertProjectBuilder(ProjectId projectId, boolean throwIfNotFound) {
             final ProjectMetadata.Builder existingBuilder = projectMetadataBuilders.get(projectId);
             if (existingBuilder != null) {
-                assert projectMetadataBuilders.containsKey(projectId) == false;
+                assert projectMetadatas.containsKey(projectId) == false;
                 return existingBuilder;
             }
             final ProjectMetadata project = projectMetadatas.remove(projectId);
             if (project == null) {
-                throw new IllegalArgumentException("project [" + projectId + "] not found");
+                if (throwIfNotFound) {
+                    throw new IllegalArgumentException("project [" + projectId + "] not found");
+                } else {
+                    return null;
+                }
             }
             final var builder = ProjectMetadata.builder(project);
             final var old = projectMetadataBuilders.put(projectId, builder);
@@ -1550,18 +1558,18 @@ public class Metadata implements Diffable<Metadata>, ChunkedToXContent {
         }
 
         private ProjectMetadata.Builder getSingleProject() {
-            if (projectMetadataBuilders.isEmpty() && projectMetadatas.size() == 0) {
+            if (projectMetadataBuilders.isEmpty() && projectMetadatas.isEmpty()) {
                 createDefaultProject();
             } else if (projectMetadataBuilders.size() + projectMetadatas.size() != 1) {
                 throw new MultiProjectPendingException(
-                    "There are multiple projects " + Sets.union(projectMetadataBuilders.keySet(), projectMetadatas.keys())
+                    "There are multiple projects " + Sets.union(projectMetadataBuilders.keySet(), projectMetadatas.keySet())
                 );
             }
             assert projectMetadataBuilders.size() + projectMetadatas.size() == 1;
             if (projectMetadataBuilders.isEmpty() == false) {
                 return projectMetadataBuilders.values().iterator().next();
             }
-            return getOrCreateProjectBuilder(projectMetadatas.keys().iterator().next());
+            return getOrConvertProjectBuilder(projectMetadatas.keySet().iterator().next());
         }
 
         public Builder projectMetadata(Map<ProjectId, ProjectMetadata> projectMetadata) {
@@ -1569,7 +1577,7 @@ public class Metadata implements Diffable<Metadata>, ChunkedToXContent {
                 : "Project metadata map is inconsistent";
             this.projectMetadataBuilders.clear();
             this.projectMetadatas.clear();
-            this.projectMetadatas.putAllFromMap(projectMetadata);
+            this.projectMetadatas.putAll(projectMetadata);
             return this;
         }
 
@@ -1592,12 +1600,12 @@ public class Metadata implements Diffable<Metadata>, ChunkedToXContent {
         }
 
         public ProjectMetadata.Builder getProject(ProjectId projectId) {
-            return getOrCreateProjectBuilder(projectId);
+            return getOrConvertProjectBuilder(projectId, false);
         }
 
         public Builder forEachProject(UnaryOperator<ProjectMetadata.Builder> modifier) {
-            projectMetadatas.keys().forEach(this::getOrCreateProjectBuilder);
-            assert projectMetadatas.size() == 0;
+            projectMetadatas.keySet().forEach(this::getOrConvertProjectBuilder);
+            assert projectMetadatas.isEmpty() : projectMetadatas;
             projectMetadataBuilders.replaceAll((p, b) -> modifier.apply(b));
             return this;
         }
@@ -1911,7 +1919,7 @@ public class Metadata implements Diffable<Metadata>, ChunkedToXContent {
         }
 
         private Map<ProjectId, ProjectMetadata> buildProjectMetadata(boolean skipNameCollisionChecks) {
-            if (projectMetadataBuilders.isEmpty() && projectMetadatas.size() == 0) {
+            if (projectMetadataBuilders.isEmpty() && projectMetadatas.isEmpty()) {
                 createDefaultProject();
             }
             assert assertProjectsConsistency();
@@ -1922,23 +1930,23 @@ public class Metadata implements Diffable<Metadata>, ChunkedToXContent {
                     final var entry = projectMetadataBuilders.entrySet().iterator().next();
                     return Map.of(entry.getKey(), entry.getValue().build(skipNameCollisionChecks));
                 } else {
-                    final var projectId = projectMetadatas.keys().iterator().next();
+                    final var projectId = projectMetadatas.keySet().iterator().next();
                     return Map.of(projectId, projectMetadatas.get(projectId));
                 }
             } else {
-                projectMetadatas.putAllFromMap(Maps.transformValues(projectMetadataBuilders, m -> m.build(skipNameCollisionChecks)));
-                return projectMetadatas.build();
+                projectMetadatas.putAll(Maps.transformValues(projectMetadataBuilders, m -> m.build(skipNameCollisionChecks)));
+                return Collections.unmodifiableMap(projectMetadatas);
             }
         }
 
         private ProjectMetadata.Builder createDefaultProject() {
-            assert projectMetadataBuilders.isEmpty() && projectMetadatas.size() == 0;
+            assert projectMetadataBuilders.isEmpty() && projectMetadatas.isEmpty();
             return projectMetadataBuilders.put(DEFAULT_PROJECT_ID, new ProjectMetadata.Builder(Map.of(), 0).id(DEFAULT_PROJECT_ID));
         }
 
         private boolean assertProjectsConsistency() {
             final var builderKeys = projectMetadataBuilders.keySet();
-            final var nonBuilderKeys = projectMetadatas.keys();
+            final var nonBuilderKeys = projectMetadatas.keySet();
             assert Sets.intersection(builderKeys, nonBuilderKeys).isEmpty()
                 : "Project metadata builders and project metadata map have overlapping keys: "
                     + Sets.intersection(builderKeys, nonBuilderKeys);
