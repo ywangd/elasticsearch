@@ -1186,6 +1186,12 @@ public abstract class ESIntegTestCase extends ESTestCase {
                 clusterAdmin().prepareState(TEST_REQUEST_TIMEOUT).get().getState(),
                 getClusterPendingTasks()
             );
+            try (var writer = new StringWriter()) {
+                new HotThreads().busiestThreads(9999).ignoreIdleThreads(false).detect(writer);
+                logger.info("hot threads:\n{}\n", writer.toString());
+            } catch (Exception e) {
+                logger.error("exception capturing hot threads", e);
+            }
             assertThat("timed out waiting for relocation", actionGet.isTimedOut(), equalTo(false));
         }
         if (status != null) {
