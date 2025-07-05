@@ -227,6 +227,7 @@ public class MasterService extends AbstractLifecycleComponent {
             return;
         }
 
+        logger.info("--> executing cluster state update for [{}]", summary);
         logger.debug("executing cluster state update for [{}]", summary);
         final ClusterState previousClusterState = state();
 
@@ -1100,6 +1101,15 @@ public class MasterService extends AbstractLifecycleComponent {
                         previousClusterState.nodes(),
                         previousClusterState.routingTable(),
                         previousClusterState.getRoutingNodes()
+                    ),
+                    e
+                );
+                logger.info(
+                    () -> format(
+                        "--> failed to execute cluster state update (on version: [%s], uuid: [%s]) for [%s]",
+                        previousClusterState.version(),
+                        previousClusterState.stateUUID(),
+                        summary
                     ),
                     e
                 );
