@@ -87,6 +87,7 @@ public class S3HttpHandler implements HttpHandler {
 
     @Override
     public void handle(final HttpExchange exchange) throws IOException {
+        logger.info("--> s3 handling " + exchange.getRequestMethod() + " " + exchange.getRequestURI());
         // Remove custom query parameters before processing the request. This simulates how S3 ignores them.
         // https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html#LogFormatCustom
         final S3Request request = parseRequest(exchange);

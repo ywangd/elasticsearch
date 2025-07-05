@@ -331,6 +331,7 @@ public class MasterService extends AbstractLifecycleComponent {
         Task task,
         ActionListener<Void> listener
     ) {
+        logger.info("--> cluster state updated, version [{}], source [{}]", newClusterState.version(), summary);
         if (logger.isTraceEnabled()) {
             logger.trace("cluster state updated, source [{}]\n{}", summary, newClusterState);
         } else {
@@ -648,6 +649,7 @@ public class MasterService extends AbstractLifecycleComponent {
         } else {
             logger.debug("took [{}] to {} for [{}]", executionTime, activity, summary);
         }
+        logger.info("--> took [{}] to {} for [{}]", executionTime, activity, summary);
     }
 
     /**
