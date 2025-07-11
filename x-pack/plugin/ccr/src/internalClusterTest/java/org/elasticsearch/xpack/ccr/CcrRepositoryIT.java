@@ -663,15 +663,20 @@ public class CcrRepositoryIT extends CcrIntegTestCase {
                         // this assertBusy completes because the listener is added after the InternalSnapshotsInfoService
                         // and ClusterService preserves the order of listeners.
                         assertBusy(() -> {
+                            final SnapshotShardSizeInfo snapshotShardSizeInfo = snapshotsInfoService.snapshotShardSizes();
                             List<Long> sizes = indexRoutingTable.shardsWithState(ShardRoutingState.UNASSIGNED)
                                 .stream()
                                 .filter(shard -> shard.unassignedInfo().lastAllocationStatus() == AllocationStatus.FETCHING_SHARD_DATA)
                                 .sorted(Comparator.comparingInt(ShardRouting::getId))
-                                .map(shard -> snapshotsInfoService.snapshotShardSizes().getShardSize(shard))
+                                .map(shard -> snapshotShardSizeInfo.getShardSize(shard))
                                 .filter(Objects::nonNull)
                                 .filter(size -> ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE == size)
                                 .collect(Collectors.toList());
-                            assertThat(sizes, hasSize(numberOfShards));
+                            assertThat(
+                                "shards = " + indexRoutingTable.allShards().toList() + ", snapshotShardSizeInfo = " + snapshotShardSizeInfo,
+                                sizes,
+                                hasSize(numberOfShards)
+                            );
                         });
                         waitForAllShardSnapshotSizesFailures.onResponse(null);
                     } catch (Exception e) {
