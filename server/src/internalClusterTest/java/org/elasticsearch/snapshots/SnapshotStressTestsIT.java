@@ -57,6 +57,7 @@ import org.elasticsearch.monitor.jvm.HotThreads;
 import org.elasticsearch.repositories.RepositoryCleanupResult;
 import org.elasticsearch.repositories.fs.FsRepository;
 import org.elasticsearch.test.InternalTestCluster;
+import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.threadpool.ScalingExecutorBuilder;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -111,6 +112,11 @@ public class SnapshotStressTestsIT extends AbstractSnapshotIntegTestCase {
         );
     }
 
+    @TestLogging(
+        value = "org.elasticsearch.cluster.metadata.MetadataIndexStateService:DEBUG,"
+            + "org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceReconciler:DEBUG",
+        reason = "test"
+    )
     public void testRandomActivities() throws InterruptedException {
         logger.info("--> initial shard snapshot per node limit: [{}]", initialShardSnapshotPerNodeLimit);
         final DiscoveryNodes discoveryNodes = clusterAdmin().prepareState(TEST_REQUEST_TIMEOUT)
@@ -595,8 +601,8 @@ public class SnapshotStressTestsIT extends AbstractSnapshotIntegTestCase {
                                 snapshotInfo.repository(),
                                 snapshotInfo.snapshotId().getName()
                             );
-                            assertTrue(closeIndexResponse.isAcknowledged());
-                            assertTrue(closeIndexResponse.isShardsAcknowledged());
+                            assertTrue(closeIndexResponse.toString(), closeIndexResponse.isAcknowledged());
+                            assertTrue(closeIndexResponse.toString(), closeIndexResponse.isShardsAcknowledged());
                             closeIndicesStep.onResponse(null);
                         }));
                     }));
