@@ -1404,6 +1404,10 @@ public class SnapshotStressTestsIT extends AbstractSnapshotIntegTestCase {
             Releasable onCompletion,
             Runnable onSuccess
         ) {
+            if (shouldStop.get()) {
+                Releasables.close(onCompletion);
+                return;
+            }
             clientExecutor.execute(mustSucceed(() -> {
                 final var clusterService = internalCluster().getCurrentMasterNodeInstance(ClusterService.class);
                 final ClusterState state = clusterService.state();
