@@ -9,6 +9,8 @@
 
 package org.elasticsearch.cluster.routing.allocation.decider;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.SnapshotsInProgress;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
 import org.elasticsearch.cluster.routing.RoutingNode;
@@ -23,6 +25,8 @@ import java.util.Objects;
  * are currently been snapshotted to be moved to other nodes.
  */
 public class SnapshotInProgressAllocationDecider extends AllocationDecider {
+
+    private static final Logger logger = LogManager.getLogger(SnapshotInProgressAllocationDecider.class);
 
     public static final String NAME = "snapshot_in_progress";
 

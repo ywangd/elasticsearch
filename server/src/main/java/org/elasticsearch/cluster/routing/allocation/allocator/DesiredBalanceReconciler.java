@@ -496,13 +496,16 @@ public class DesiredBalanceReconciler {
                     continue;
                 }
 
-                if (allocation.deciders().canAllocate(shardRouting, allocation).type() != Decision.Type.YES) {
+                allocation.setDebugMode(RoutingAllocation.DebugMode.ON);
+                final Decision canAllocateDecision = allocation.deciders().canAllocate(shardRouting, allocation);
+                if (canAllocateDecision.type() != Decision.Type.YES) {
                     // cannot allocate anywhere, no point in looking for a target node
                     continue;
                 }
 
                 final var routingNode = routingNodes.node(shardRouting.currentNodeId());
                 final var canRemainDecision = allocation.deciders().canRemain(shardRouting, routingNode, allocation);
+                logger.info("--> moveShards canRemain [{}], decision = [{}]", shardRouting, canRemainDecision);
                 if (canRemainDecision.type() != Decision.Type.NO) {
                     // it's desired elsewhere but technically it can remain on its current node. Defer its movement until later on to give
                     // priority to shards that _must_ move.

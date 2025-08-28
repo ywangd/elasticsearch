@@ -204,7 +204,7 @@ public class AllocationDeciders {
         Function<AllocationDecider, Decision> deciderAction,
         BiFunction<String, Decision, String> logMessageCreator
     ) {
-        if (debugMode == RoutingAllocation.DebugMode.OFF) {
+        if (debugMode == RoutingAllocation.DebugMode.OFF && false) {
             Decision result = Decision.YES;
             for (AllocationDecider decider : deciders) {
                 var decision = deciderAction.apply(decider);
@@ -225,6 +225,7 @@ public class AllocationDeciders {
                 if (logger.isTraceEnabled() && decision.type() == Decision.Type.NO) {
                     logger.trace(() -> logMessageCreator.apply(decider.getClass().getSimpleName(), decision));
                 }
+                logger.info("--> decider [{}] returned [{}]", decider.getClass().getSimpleName(), decision);
                 if (decision != Decision.ALWAYS && (debugMode == RoutingAllocation.DebugMode.ON || decision.type() != Decision.Type.YES)) {
                     result.add(decision);
                 }
