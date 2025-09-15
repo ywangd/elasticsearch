@@ -245,6 +245,9 @@ public final class TaskExecutionTimeTrackingEsThreadPoolExecutor extends EsThrea
                     + taskExecutionNanos
                     + ", failedOrRejected: "
                     + failedOrRejected;
+            if (name.endsWith("write")) {
+                logger.info("--> afterExecute [{}] took [{}ns]", timedRunnable, taskExecutionNanos);
+            }
             if (taskExecutionNanos != -1) {
                 // taskExecutionNanos may be -1 if the task threw an exception
                 executionEWMA.addValue(taskExecutionNanos);
@@ -310,6 +313,15 @@ public final class TaskExecutionTimeTrackingEsThreadPoolExecutor extends EsThrea
             final long maximumExecutionTimeSinceLastPollNanos = timeSinceLastPoll * getMaximumPoolSize();
             final double utilizationSinceLastPoll = (double) totalExecutionTimeSinceLastPollNanos / maximumExecutionTimeSinceLastPollNanos;
 
+            logger.info(
+                "--> [{}] polled utilization [{}], execution time [last={}], [current={}], poll time [last={}], [current={}]",
+                name,
+                utilizationSinceLastPoll,
+                lastTotalExecutionTime,
+                currentTotalExecutionTimeNanos,
+                lastPollTime,
+                currentPollTimeNanos
+            );
             lastTotalExecutionTime = currentTotalExecutionTimeNanos;
             lastPollTime = currentPollTimeNanos;
 

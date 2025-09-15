@@ -27,7 +27,7 @@ import static org.elasticsearch.core.Strings.format;
  */
 public class EsThreadPoolExecutor extends ThreadPoolExecutor {
 
-    private static final Logger logger = LogManager.getLogger(EsThreadPoolExecutor.class);
+    protected static final Logger logger = LogManager.getLogger(EsThreadPoolExecutor.class);
 
     // noop probe to prevent starvation of work in the work queue due to ForceQueuePolicy
     // https://github.com/elastic/elasticsearch/issues/124667
@@ -43,7 +43,7 @@ public class EsThreadPoolExecutor extends ThreadPoolExecutor {
     /**
      * Name used in error reporting.
      */
-    private final String name;
+    protected final String name;
 
     EsThreadPoolExecutor(
         String name,
@@ -87,6 +87,9 @@ public class EsThreadPoolExecutor extends ThreadPoolExecutor {
 
     @Override
     public void execute(Runnable command) {
+        if (name.endsWith("write")) {
+            logger.info("--> [{}] execute [{}]", name, command);
+        }
         final Runnable wrappedRunnable = command != WORKER_PROBE ? wrapRunnable(command) : WORKER_PROBE;
         try {
             super.execute(wrappedRunnable);
