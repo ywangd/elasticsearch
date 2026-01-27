@@ -9,9 +9,13 @@
 
 package org.elasticsearch.core;
 
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
+
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /** Utility methods to work with {@link Releasable}s. */
 public enum Releasables {
@@ -160,6 +164,12 @@ public enum Releasables {
         return new ReleaseOnce(releasable);
     }
 
+    private static final Logger logger = LogManager.getLogger(Releasables.class);
+
+    private static String formatStackTrace(final StackTraceElement[] stackTrace) {
+        return Arrays.stream(stackTrace).skip(1).map(e -> "\tat " + e).collect(Collectors.joining("\n"));
+    }
+
     public static Releasable assertOnce(final Releasable delegate) {
         if (Assertions.ENABLED) {
             return new Releasable() {
@@ -169,6 +179,15 @@ public enum Releasables {
                 private void assertFirstRun() {
                     var previousRun = firstCompletion.compareAndExchange(null, new Exception("already executed"));
                     // reports the stack traces of both completions
+                    if (previousRun != null) {
+                        logger.error(
+                            "--> Releasable "
+                                + delegate
+                                + " closed more than once: first at\n"
+                                + formatStackTrace(previousRun.getStackTrace()),
+                            new RuntimeException()
+                        );
+                    }
                     assert previousRun == null : new AssertionError(delegate.toString(), previousRun);
                 }
 

@@ -24,6 +24,8 @@ import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateTaskListener;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.NotMasterException;
+import org.elasticsearch.cluster.SnapshotDeletionsInProgress;
+import org.elasticsearch.cluster.SnapshotsInProgress;
 import org.elasticsearch.cluster.coordination.ClusterStatePublisher;
 import org.elasticsearch.cluster.coordination.FailedToCommitClusterStateException;
 import org.elasticsearch.cluster.metadata.ProcessClusterEventTimeoutException;
@@ -336,6 +338,15 @@ public class MasterService extends AbstractLifecycleComponent {
             try (var ignored = threadPool.getThreadContext().newTraceContext()) {
                 final var newClusterStateVersion = newClusterState.getVersion();
 
+                final var snapshotsInProgress = SnapshotsInProgress.get(newClusterState);
+                final var snapshotDeletions = SnapshotDeletionsInProgress.get(newClusterState);
+                logger.info(
+                    "--> version=[{}], source [{}], snapshots-in-progress=[{}], snapshot-deletions=[{}]",
+                    newClusterStateVersion,
+                    summary,
+                    Strings.toString(snapshotsInProgress),
+                    Strings.toString(snapshotDeletions)
+                );
                 final Task task = taskManager.register("master", STATE_UPDATE_ACTION_NAME, new TaskAwareRequest() {
                     @Override
                     public void setParentTask(TaskId taskId) {}
