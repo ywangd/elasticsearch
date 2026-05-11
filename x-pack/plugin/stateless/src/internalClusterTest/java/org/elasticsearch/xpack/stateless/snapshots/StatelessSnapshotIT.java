@@ -9,7 +9,10 @@ package org.elasticsearch.xpack.stateless.snapshots;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.SubscribableListener;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.SnapshotsInProgress;
+import org.elasticsearch.cluster.metadata.NodesShutdownMetadata;
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
@@ -29,6 +32,7 @@ import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.snapshots.SnapshotException;
 import org.elasticsearch.snapshots.SnapshotState;
+import org.elasticsearch.snapshots.TransportUpdateSnapshotStatusAction;
 import org.elasticsearch.telemetry.TestTelemetryPlugin;
 import org.elasticsearch.test.ClusterServiceUtils;
 import org.elasticsearch.test.NodeShutdownTestUtils;
@@ -53,6 +57,7 @@ import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -748,6 +753,8 @@ public class StatelessSnapshotIT extends AbstractStatelessPluginIntegTestCase {
         assertBusy(() -> assertFalse(snapshotsCommitService.hasTrackingForShard(shardId0)));
     }
 
+    // This test ensures old data node does not send stale PAUSED update to new master after the shard snapshot
+    // is already re-assigned to another data node.
     public void testStaleNodePausedNotificationDoesNotAffectCommitOnNewNode() throws Exception {
         final var settings = Settings.builder()
             .put(STATELESS_SNAPSHOT_ENABLED_SETTING.getKey(), StatelessSnapshotEnabledStatus.ENABLED)
@@ -780,44 +787,11 @@ public class StatelessSnapshotIT extends AbstractStatelessPluginIntegTestCase {
         setNodeRepositoryStrategy(indexNodeA, blockOnA);
 
         // Also block snapshot read on indexNodeB to wait for master failover
-        final var unblockB = new CountDownLatch(1);
         final var blockedOnB = new CountDownLatch(1);
-        setNodeRepositoryStrategy(indexNodeB, new AssertNoMissingBlobStrategy() {
-            @Override
-            public InputStream blobContainerReadBlob(
-                CheckedSupplier<InputStream, IOException> originalSupplier,
-                OperationPurpose purpose,
-                String blobName
-            ) throws IOException {
-                if (purpose == OperationPurpose.SNAPSHOT_DATA) {
-                    if (blockedOnB.getCount() > 0) {
-                        blockedOnB.countDown();
-                    }
-                    safeAwait(unblockB);
-                }
-                return super.blobContainerReadBlob(originalSupplier, purpose, blobName);
-            }
-
-            @Override
-            public InputStream blobContainerReadBlob(
-                CheckedSupplier<InputStream, IOException> originalSupplier,
-                OperationPurpose purpose,
-                String blobName,
-                long position,
-                long length
-            ) throws IOException {
-                if (purpose == OperationPurpose.SNAPSHOT_DATA) {
-                    if (blockedOnB.getCount() > 0) {
-                        blockedOnB.countDown();
-                    }
-                    safeAwait(unblockB);
-                }
-                return super.blobContainerReadBlob(originalSupplier, purpose, blobName, position, length);
-            }
-        });
+        final var unblockB = blobReadOnNode(indexNodeB, blockedOnB);
 
         // Start snapshot, wait for it to block on indexNodeA and mark the node for shutdown
-        final var snapshotName = "snap-stale-paused";
+        final var snapshotName = "snap-stale-reassigned";
         final var snapshotFuture = clusterAdmin().prepareCreateSnapshot(TEST_REQUEST_TIMEOUT, repoName, snapshotName)
             .setIndices(indexName)
             .setPartial(true)
@@ -922,6 +896,222 @@ public class StatelessSnapshotIT extends AbstractStatelessPluginIntegTestCase {
         for (SnapshotsCommitService commitService : internalCluster().getInstances(SnapshotsCommitService.class)) {
             assertBusy(() -> assertFalse(commitService.hasTrackingForShard(shardId)));
         }
+    }
+
+    // This test is similar to testStaleNodePausedNotificationDoesNotAffectCommitOnNewNode. The difference is that
+    // the re-sync should not send an update if the state on the master is paused, i.e., before it is re-assigned.
+    // The update request is async so that the master could reassign the shard snapshot before the request is handled,
+    // which runs into the similar issue of stale update.
+    public void testStaleNodePausedNotificationIsSkippedWhenMasterAlreadyRecordedPaused() throws Exception {
+        final var settings = Settings.builder()
+            .put(STATELESS_SNAPSHOT_ENABLED_SETTING.getKey(), StatelessSnapshotEnabledStatus.ENABLED)
+            .put(ObjectStoreService.TYPE_SETTING.getKey(), ObjectStoreService.ObjectStoreType.MOCK)
+            .put("thread_pool.snapshot.max", 1) // single thread for controlled test
+            .build();
+
+        startMasterOnlyNode(settings);
+        startMasterOnlyNode(settings);
+        final var indexNodeA = startIndexNode(settings);
+        final var indexNodeB = startIndexNode(settings);
+        ensureStableCluster(4);
+
+        // Create the index excluding indexNodeB so the shard remains on indexNodeA when it shuts down. This is to ensure that the
+        // master does not reassign it too early.
+        final String indexName = randomIndexName();
+        createIndex(indexName, indexSettings(1, 0).put("index.routing.allocation.exclude._name", indexNodeB).build());
+        ensureGreen(indexName);
+        indexAndMaybeFlush(indexName);
+
+        final var repoName = randomRepoName();
+        createRepository(repoName, "fs");
+
+        final var shardId = new ShardId(resolveIndex(indexName), 0);
+        final var indexNodeAId = getNodeId(indexNodeA);
+        final var indexNodeBId = getNodeId(indexNodeB);
+
+        // Fail if the old data node sends the 2nd, stale update request
+        final AtomicBoolean shardUpdateSent = new AtomicBoolean(false);
+        MockTransportService.getInstance(indexNodeA).addSendBehavior((connection, requestId, action, request, options) -> {
+            if (TransportUpdateSnapshotStatusAction.NAME.equals(action)) {
+                assertTrue("unexpected extra shard update", shardUpdateSent.compareAndSet(false, true));
+            }
+            connection.sendRequest(requestId, action, request, options);
+        });
+
+        // Block initial metadata read on indexNodeA so its snapshot is mid-flight when we mark the node for shutdown.
+        final var blockOnA = new BlockingMetadataReadStrategy(1);
+        setNodeRepositoryStrategy(indexNodeA, blockOnA);
+
+        // Also block snapshot data read on indexNodeB and verify its commit is not released by a stale update from indexNodeA
+        final var blockedOnB = new CountDownLatch(1);
+        final var unblockB = blobReadOnNode(indexNodeB, blockedOnB);
+
+        // Start the snapshot, wait for it to block on indexNodeA and mark the node for shutdown
+        final var snapshotName = "snap-stale-paused";
+        final var snapshotFuture = clusterAdmin().prepareCreateSnapshot(TEST_REQUEST_TIMEOUT, repoName, snapshotName)
+            .setIndices(indexName)
+            .setPartial(true)
+            .setWaitForCompletion(true)
+            .execute();
+        safeAwait(blockOnA.readObserved);
+        final var currentMasterClusterService = internalCluster().getCurrentMasterNodeInstance(ClusterService.class);
+        NodeShutdownTestUtils.putShutdownMetadata(
+            indexNodeA,
+            currentMasterClusterService,
+            EnumSet.of(SingleNodeShutdownMetadata.Type.SIGTERM)
+        );
+
+        // Wait for master to know about the shutdown, unblock indexNodeA's read so that it notifies master to pause the shard snapshot
+        awaitClusterState(state -> SnapshotsInProgress.get(state).isNodeIdForRemoval(indexNodeAId));
+        final var shardSnapshotPausedListener = ClusterServiceUtils.addMasterTemporaryStateListener(state -> {
+            final var entry = SnapshotsInProgress.get(state)
+                .asStream()
+                .filter(e -> snapshotName.equals(e.snapshot().getSnapshotId().getName()))
+                .findFirst()
+                .orElse(null);
+            if (entry == null) {
+                return false;
+            }
+            final var status = entry.shards().get(shardId);
+            return status != null
+                && status.state() == SnapshotsInProgress.ShardState.PAUSED_FOR_NODE_REMOVAL
+                && indexNodeAId.equals(status.nodeId());
+        });
+        blockOnA.proceed.countDown();
+        safeAwait(shardSnapshotPausedListener);
+
+        // Failover the master. NOTE indexNodeA must remain shut down. Otherwise, the snapshot would resume on it.
+        final var oldMasterName = internalCluster().getMasterName();
+        addAdditionalShutdownForMaster(currentMasterClusterService, oldMasterName);
+        awaitMasterNode(); // Ensure new master takes over
+        assertThat(internalCluster().getMasterName(), not(equalTo(oldMasterName)));
+
+        // Allow relocation and verify the shard snapshot is reassigned to indexNodeB
+        final var shardSnapshotReassignedListener = ClusterServiceUtils.addMasterTemporaryStateListener(state -> {
+            final var entry = SnapshotsInProgress.get(state)
+                .asStream()
+                .filter(e -> snapshotName.equals(e.snapshot().getSnapshotId().getName()))
+                .findFirst()
+                .orElse(null);
+            if (entry == null) {
+                return false;
+            }
+            final var status = entry.shards().get(shardId);
+            return status != null && status.state() == SnapshotsInProgress.ShardState.INIT && indexNodeBId.equals(status.nodeId());
+        });
+        updateIndexSettings(Settings.builder().putNull("index.routing.allocation.exclude._name"), indexName);
+        safeAwait(shardSnapshotReassignedListener);
+
+        // Wait for indexNodeB's to start the shard snapshot and block on read
+        safeAwait(blockedOnB);
+        final var commitServiceB = internalCluster().getInstance(SnapshotsCommitService.class, indexNodeB);
+        assertTrue(commitServiceB.hasTrackingForShard(shardId));
+
+        // Unblock indexNodeB's read and ensure the snapshot complete
+        final var snapshotCompletedListener = ClusterServiceUtils.addMasterTemporaryStateListener(state -> {
+            final var snapshotEntry = SnapshotsInProgress.get(state)
+                .asStream()
+                .filter(e -> snapshotName.equals(e.snapshot().getSnapshotId().getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("snapshot not found"));
+            if (snapshotEntry.state().completed()) {
+                assertThat(snapshotEntry.state(), is(SnapshotsInProgress.State.SUCCESS));
+                assertThat(snapshotEntry.shards().get(shardId).state(), is(SnapshotsInProgress.ShardState.SUCCESS));
+                return true;
+            } else {
+                return false;
+            }
+        });
+        unblockB.countDown();
+
+        // Request encounters not-master exception but the snapshot completes internally
+        assertThat(
+            expectThrows(SnapshotException.class, () -> snapshotFuture.actionGet(TEST_REQUEST_TIMEOUT)).getMessage(),
+            containsString("no longer master")
+        );
+        safeAwait(snapshotCompletedListener);
+        awaitClusterState(indexNodeB, state -> SnapshotsInProgress.get(state).count() == 0);
+
+        for (SnapshotsCommitService commitService : internalCluster().getInstances(SnapshotsCommitService.class)) {
+            assertBusy(() -> assertFalse(commitService.hasTrackingForShard(shardId)));
+        }
+    }
+
+    private CountDownLatch blobReadOnNode(String indexNodeB, CountDownLatch blockedOnB) {
+        final CountDownLatch unblockB = new CountDownLatch(1);
+        setNodeRepositoryStrategy(indexNodeB, new AssertNoMissingBlobStrategy() {
+            @Override
+            public InputStream blobContainerReadBlob(
+                CheckedSupplier<InputStream, IOException> originalSupplier,
+                OperationPurpose purpose,
+                String blobName
+            ) throws IOException {
+                if (purpose == OperationPurpose.SNAPSHOT_DATA) {
+                    if (blockedOnB.getCount() > 0) {
+                        blockedOnB.countDown();
+                    }
+                    safeAwait(unblockB);
+                }
+                return super.blobContainerReadBlob(originalSupplier, purpose, blobName);
+            }
+
+            @Override
+            public InputStream blobContainerReadBlob(
+                CheckedSupplier<InputStream, IOException> originalSupplier,
+                OperationPurpose purpose,
+                String blobName,
+                long position,
+                long length
+            ) throws IOException {
+                if (purpose == OperationPurpose.SNAPSHOT_DATA) {
+                    if (blockedOnB.getCount() > 0) {
+                        blockedOnB.countDown();
+                    }
+                    safeAwait(unblockB);
+                }
+                return super.blobContainerReadBlob(originalSupplier, purpose, blobName, position, length);
+            }
+        });
+        return unblockB;
+    }
+
+    private static void addAdditionalShutdownForMaster(ClusterService masterClusterService, String masterNodeName) {
+        safeAwait(
+            (ActionListener<Void> listener) -> masterClusterService.submitUnbatchedStateUpdateTask(
+                "test add master shutdown",
+                new ClusterStateUpdateTask() {
+                    @Override
+                    public ClusterState execute(ClusterState currentState) {
+                        final var node = currentState.nodes().resolveNode(masterNodeName);
+                        final var combined = new HashMap<>(currentState.metadata().nodeShutdowns().getAll());
+                        combined.put(
+                            node.getId(),
+                            SingleNodeShutdownMetadata.builder()
+                                .setNodeId(node.getId())
+                                .setNodeEphemeralId(node.getEphemeralId())
+                                .setType(SingleNodeShutdownMetadata.Type.SIGTERM)
+                                .setStartedAtMillis(masterClusterService.threadPool().absoluteTimeInMillis())
+                                .setReason("test")
+                                .setGracePeriod(TimeValue.timeValueSeconds(60))
+                                .build()
+                        );
+                        return currentState.copyAndUpdateMetadata(
+                            mdb -> mdb.putCustom(NodesShutdownMetadata.TYPE, new NodesShutdownMetadata(combined))
+                        );
+                    }
+
+                    @Override
+                    public void onFailure(Exception e) {
+                        listener.onFailure(e);
+                    }
+
+                    @Override
+                    public void clusterStateProcessed(ClusterState initialState, ClusterState newState) {
+                        listener.onResponse(null);
+                    }
+                }
+            )
+        );
     }
 
     private SubscribableListener<Void> observeShardSnapshotAborted(String node, String repoName, ShardId shardId) {
