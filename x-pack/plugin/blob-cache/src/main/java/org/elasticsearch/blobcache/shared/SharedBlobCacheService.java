@@ -2741,8 +2741,11 @@ public class SharedBlobCacheService<KeyType extends SharedBlobCacheService.KeyBa
             assert Thread.holdsLock(SharedBlobCacheService.this);
             final long startNanos = relativeNanosProvider.getAsLong();
             final int[] entriesScanned = new int[1];
+            final var policyRejectedRegion = new AtomicInteger(0);
+            final int nonEvictableUpperBound = (int) (numRegions * 0.95);
             final long currentEpoch = epoch.get(); // must be captured before attempting to evict a freq 0
-            final Predicate<CacheRegion<KeyType>> canEvict = evictionPolicy.createPredicate(incoming.chunk);
+            final Predicate<CacheRegion<KeyType>> canEvict = evictionPolicy.createPredicate(incoming.chunk)
+                .and(region -> policyRejectedRegion.incrementAndGet() <= nonEvictableUpperBound);
             SharedBytes.IO result = maybeEvictAndTakeForFrequency(incoming, evictedNotification, 0, entriesScanned, canEvict);
             if (freqs[0].count < freq0DecayScheduleThreshold && freeRegions.isEmpty()) {
                 maybeScheduleDecayAndNewEpoch(currentEpoch);
