@@ -28,7 +28,6 @@ import java.util.concurrent.TimeUnit;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
@@ -37,9 +36,9 @@ import static org.hamcrest.Matchers.not;
  * went down in two steps:
  * <ol>
  *     <li>The link between the master (holding the primary) and the other data node breaks. The master removes the node from the
- *     cluster and the next write on the primary marks the replica's allocation id as stale (removes it from the in-sync set).</li>
- *     <li>The link heals, the node rejoins and starts a peer recovery of the replica from the primary. This recovery has not completed
- *     (so the replica is not in-sync again) when the master node is lost for good.</li>
+ *     cluster. No further indexing takes place.</li>
+ *     <li>The link heals, the node rejoins and its replica is re-initialized with a new allocation id and starts a peer recovery from the
+ *     primary. This recovery has not completed (so the new id is not in-sync) when the master node is lost for good.</li>
  * </ol>
  * The surviving copy is stale so the primary cannot be allocated and the index stays red, even though a replica existed.
  */
@@ -92,13 +91,12 @@ public class StaleReplicaRecoveryInterruptedIT extends AbstractDisruptionTestCas
 
         assertBusy(() -> assertThat(getNodeClusterState(primaryNode).nodes().getDataNodes().size(), equalTo(1)));
 
-        // A write while the replica is gone makes the primary mark the replica's allocation id as stale.
-        client(primaryNode).prepareIndex(indexName).setSource("field", "during").get();
-        assertBusy(() -> {
-            final var inSyncIds = getNodeClusterState(primaryNode).metadata().getProject().index(indexName).inSyncAllocationIds(0);
-            assertThat(inSyncIds, hasSize(1));
-            assertThat(inSyncIds.contains(staleAllocationId), is(false));
-        });
+        // No writes happen while the replica is gone, so its allocation id is still in the in-sync set. Staleness comes solely from the
+        // replica being re-initialized under a new allocation id on rejoin.
+        assertThat(
+            getNodeClusterState(primaryNode).metadata().getProject().index(indexName).inSyncAllocationIds(0).contains(staleAllocationId),
+            is(true)
+        );
 
         // Step 2: heal the link and hold the replica's peer recovery on the primary so that it can never complete.
         final CountDownLatch recoveryStarted = new CountDownLatch(1);
